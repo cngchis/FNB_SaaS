@@ -1,0 +1,7 @@
+import type { Product } from '../types'
+
+export function ProductArtwork({ product, compact = false }: { product: Product; compact?: boolean }) {
+  return <span className={`product-art ${compact ? 'compact-art' : ''} ${product.category === 'Bánh' ? 'bakery-art' : product.category === 'Retail SKU' ? 'retail-art' : 'drink-art'}`} style={{ backgroundColor: product.color }} aria-hidden="true">
+    {product.category === 'Bánh' ? <svg viewBox="0 0 96 74"><path d="M16 51c3-13 11-24 22-30 8-5 17-5 24 0 9 6 15 16 18 28-11 10-47 15-64 2Z" fill="#D89B45"/><path d="M30 47c3-12 9-19 16-23M45 48c2-12 6-20 12-27M59 49c1-11 4-17 8-22" fill="none" stroke="#F8D695" strokeWidth="4" strokeLinecap="round"/><ellipse cx="49" cy="57" rx="34" ry="5" fill="#B47732" opacity=".18"/></svg> : product.category === 'Retail SKU' ? <svg viewBox="0 0 96 74"><path d="M31 15h34l-3 48H34l-3-48Z" fill="#6F9B83"/><path d="M37 10h22v8H37z" fill="#48755E"/><path d="M37 29h22" stroke="#D9E9DC" strokeWidth="3"/><ellipse cx="48" cy="64" rx="19" ry="3" fill="#315842" opacity=".12"/></svg> : <svg viewBox="0 0 96 74"><path d="M30 21h36l-4 40H34l-4-40Z" fill="#fff" opacity=".86"/><path d="M33 37h30l-2 22H35l-2-22Z" fill={product.category === 'Trà' ? '#C97843' : '#8B5939'}/><path d="M38 21 51 8" stroke="#619B76" strokeWidth="3" strokeLinecap="round"/><path d="M42 22h15" stroke="#D6D2C5" strokeWidth="2"/><ellipse cx="49" cy="62" rx="20" ry="3" fill="#3E2B1F" opacity=".12"/></svg>}
+  </span>
+}
