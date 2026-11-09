@@ -965,3 +965,9 @@ kbd { flex: 0 0 auto; padding: 2px 4px; color: #8e8e93; border: 1px solid #e5e5e
   .record-product-cell img { width: 28px; height: 28px; }
   .unit-editor-row { grid-template-columns: 1fr 1fr; }
 }
+/* Authentication is a new screen; existing application selectors are unchanged. */
+.auth-page { min-height: 100dvh; display: grid; place-items: center; padding: 24px; background: #f1f5f8; }
+.auth-card { width: min(100%, 420px); position: relative; }
+.auth-card .form-label { margin-top: 16px; }
+.auth-page .button-primary { background: #16794b; border-color: #16794b; color: #fff; }
+.auth-page .button-primary:hover { background: #12633d; border-color: #12633d; }

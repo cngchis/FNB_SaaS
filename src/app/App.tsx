@@ -7,10 +7,13 @@ import { ManagementRecordPage } from '../features/management/ManagementRecordPag
 import { managementModules } from '../features/management/moduleConfig'
 import { Reports } from '../features/reports/Reports'
 import { POS } from '../features/pos/POS'
+import { AuthGuard, Login } from '../features/auth/Login'
 
 export default function App() {
   return (
     <Routes>
+      <Route path="/login" element={<Login />} />
+      <Route element={<AuthGuard />}>
       <Route element={<ManagementLayout />}>
         <Route path="/management" element={<Dashboard />} />
         <Route path="/management/inventory" element={<Inventory />} />
@@ -24,6 +27,7 @@ export default function App() {
       </Route>
       <Route path="/pos" element={<POS />} />
       <Route path="*" element={<Navigate to="/management" replace />} />
+      </Route>
     </Routes>
   )
 }

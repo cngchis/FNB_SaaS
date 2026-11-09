@@ -1,5 +1,6 @@
+import { useSessionDisplay } from '../api/sessionDisplay'
 import { useState } from 'react'
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { ArrowLeftRight, BarChart3, Bell, Boxes, ChevronDown, CreditCard, LayoutDashboard, Menu, MoreHorizontal, ShoppingBag, Users, Wallet, UserRoundCog, CircleUserRound, ChevronRight, Utensils, Tags, NotebookText, Armchair, QrCode, Bike, ReceiptText, Settings2, type LucideIcon } from 'lucide-react'
 
 const navigationGroups = [
@@ -18,6 +19,8 @@ const routeTitles: Record<string, string> = {
 }
 
 export function ManagementLayout() {
+  const account = useSessionDisplay()
+  const navigate = useNavigate()
   const location = useLocation()
   const activeGroup = navigationGroups.find((group) => group.items.some((item) => item.to === location.pathname))?.label
   const [moreOpen, setMoreOpen] = useState(false)
@@ -35,7 +38,7 @@ export function ManagementLayout() {
         <NavLink to="/management/cashbook" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}><Wallet size={18} strokeWidth={1.8} /><span>Sổ quỹ</span></NavLink>
         <NavigationGroup label="Báo cáo" icon={BarChart3} items={navigationGroups[6].items} active={activeGroup === 'Báo cáo'} />
       </nav>
-      <div className="sidebar-bottom"><div className="user-card"><div className="avatar">CH</div><div><strong>Chí Hồ</strong><small>Quản lý cửa hàng</small></div><ChevronDown size={15} /></div></div>
+      <div className="sidebar-bottom"><div className="user-card" role={account.mock ? undefined : 'button'} tabIndex={account.mock ? undefined : 0} onClick={account.mock ? undefined : () => navigate('/login')} onKeyDown={(event) => { if (!account.mock && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); navigate('/login') } }}><div className="avatar">{account.initials}</div><div><strong>{account.name}</strong><small>{account.role}</small></div><ChevronDown size={15} /></div></div>
     </aside>
 
     <nav className="mobile-bottom-nav" aria-label="Điều hướng di động">
@@ -45,7 +48,7 @@ export function ManagementLayout() {
       <button type="button" className={`mobile-tab ${moreOpen ? 'active' : ''}`} aria-expanded={moreOpen} onClick={() => setMoreOpen((open) => !open)}><MoreHorizontal size={19} /><span>Thêm</span></button>
     </nav>
     <main className={`management-main ${moreOpen ? 'more-screen-open' : ''}`}>
-      <header className="topbar"><div className="topbar-heading"><span className="breadcrumb">Quản lý cửa hàng</span><strong>{title}</strong></div><div className="topbar-actions"><NavLink to="/pos" className="pos-shortcut"><CreditCard size={16} /> Mở POS</NavLink><span className="online-pill"><i /> Online</span><button className="icon-button" type="button" aria-label="Thông báo"><Bell size={18} /><i className="notification-dot" /></button><button className="branch-selector" type="button"><span className="branch-avatar">M</span><span><small>Chi nhánh</small><strong>Mộc Store · Quận 1</strong></span><ChevronDown size={15} /></button></div></header>
+      <header className="topbar"><div className="topbar-heading"><span className="breadcrumb">Quản lý cửa hàng</span><strong>{title}</strong></div><div className="topbar-actions"><NavLink to="/pos" className="pos-shortcut"><CreditCard size={16} /> Mở POS</NavLink><span className="online-pill"><i /> Online</span><button className="icon-button" type="button" aria-label="Thông báo"><Bell size={18} /><i className="notification-dot" /></button><button className="branch-selector" type="button"><span className="branch-avatar">M</span><span><small>Chi nhánh</small><strong>{account.branch}</strong></span><ChevronDown size={15} /></button></div></header>
       <div className="page-content">{moreOpen ? <MobileMorePage onNavigate={() => setMoreOpen(false)} /> : <Outlet />}</div>
     </main>
   </div>
@@ -71,9 +74,11 @@ const moreSections = [
 ]
 
 function MobileMorePage({ onNavigate }: { onNavigate: () => void }) {
+  const account = useSessionDisplay()
+  const navigate = useNavigate()
   return <div className="mobile-more-page">
     <section className="mobile-more-profile">
-      <div className="mobile-more-user"><span className="mobile-more-avatar"><CircleUserRound size={32} /></span><div><strong>Chí Hồ</strong><button type="button">Chi nhánh trung tâm <ChevronDown size={14} /></button></div></div>
+      <div className="mobile-more-user"><span className="mobile-more-avatar"><CircleUserRound size={32} /></span><div><strong>{account.name}</strong><button type="button" onClick={account.mock ? undefined : () => navigate('/login')}>{account.shortBranch} <ChevronDown size={14} /></button></div></div>
       <NavLink to="/management/employee-settings" onClick={onNavigate}><span>Thông tin hợp đồng</span><ChevronRight size={20} /></NavLink>
       <NavLink to="/management/employees" onClick={onNavigate}><span>Tài khoản</span><span className="mobile-more-account">ADMIN <ChevronRight size={20} /></span></NavLink>
     </section>

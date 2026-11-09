@@ -1,6 +1,9 @@
+import { useRemoteRecords } from '../../api/useRemoteRecords'
+import { errorMessage } from '../../api/recordAdapter'
+import { apiConfig } from '../../api/config'
 import { loadRows, storageKey } from '../../api/localManagement'
 import { prototypeStorage } from '../../api/prototypeStorage'
-import { Fragment, useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { ChevronLeft, ChevronRight, Download, PackagePlus, Pencil, Plus, Search, SlidersHorizontal, X } from 'lucide-react'
 import { formatCurrency } from '../../services/mockData'
 import { managementModules, type ManagementModule, type ManagementRow, type ManagementValue } from './moduleConfig'
@@ -119,7 +122,7 @@ function PurchaseWorkspace() {
 }
 
 function RecordWorkspace({ module }: { module: ManagementModule }) {
-  const [rows, setRows] = useState(() => loadRows(module))
+  const [localRows, setRows] = useState(() => !apiConfig.useMock && ['menu-items', 'customers', 'customer-groups'].includes(module.id) ? [] : loadRows(module))
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState('Tất cả')
   const [sortKey, setSortKey] = useState<string | null>(null)
@@ -129,17 +132,35 @@ function RecordWorkspace({ module }: { module: ManagementModule }) {
   const [editing, setEditing] = useState<ManagementRow | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<ManagementRow | null>(null)
   const [notice, setNotice] = useState('')
+  const [failure, setFailure] = useState('')
+  useEffect(() => {
+    if (!failure || formOpen || deleteTarget) return
+    const timer = window.setTimeout(() => setFailure(''), 5000)
+    return () => window.clearTimeout(timer)
+  }, [failure, formOpen, deleteTarget])
   const [expandedRow, setExpandedRow] = useState<string | null>(null)
   const [cashTab, setCashTab] = useState('Tổng quỹ')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [branchFilter, setBranchFilter] = useState('Tất cả chi nhánh')
 
+  const remote = useRemoteRecords(module.id, page, query, filter, sortKey, ascending)
+  const footerRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
+    if (!remote.hasMore || remote.fetchingMore || remote.loading || !footerRef.current) return
+    const observer = new IntersectionObserver((entries) => { if (entries.some((entry) => entry.isIntersecting)) void remote.loadMore() }, { rootMargin: '80px' })
+    observer.observe(footerRef.current)
+    return () => observer.disconnect()
+  }, [remote.hasMore, remote.fetchingMore, remote.loading, remote.loadMore])
+  const rows = remote.remote ? remote.rows : localRows
+
+  useEffect(() => {
+    if (remote.remote) return
     try { prototypeStorage.setItem(storageKey(module.id), JSON.stringify(rows)) } catch { setNotice('Không thể lưu dữ liệu demo trên thiết bị.') }
-  }, [module.id, rows])
+  }, [module.id, rows, remote.remote])
 
   const filteredRows = useMemo(() => {
+    if (remote.remote) return rows
     const result = rows.filter((row) => {
       const matchesText = Object.values(row).some((value) => String(value).toLocaleLowerCase('vi').includes(query.toLocaleLowerCase('vi')))
       const matchesFilter = filter === 'Tất cả' || Object.values(row).some((value) => String(value) === filter)
@@ -159,17 +180,22 @@ function RecordWorkspace({ module }: { module: ManagementModule }) {
       return ascending ? comparison : -comparison
     })
     return result
-  }, [filter, query, rows, sortKey, ascending, module.id, cashTab, dateFrom, dateTo, branchFilter])
+  }, [filter, query, rows, sortKey, ascending, module.id, cashTab, dateFrom, dateTo, branchFilter, remote.remote])
 
-  const pageCount = Math.max(1, Math.ceil(filteredRows.length / pageSize))
-  const visibleRows = filteredRows.slice((page - 1) * pageSize, page * pageSize)
-  useEffect(() => { if (page > pageCount) setPage(pageCount) }, [page, pageCount])
+  const totalRows = remote.remote ? remote.total : filteredRows.length
+  const pageCount = remote.remote ? remote.pages : Math.max(1, Math.ceil(filteredRows.length / pageSize))
+  const visibleRows = remote.remote ? rows : filteredRows.slice((page - 1) * pageSize, page * pageSize)
+  useEffect(() => { if (!remote.loading && !remote.error && page > pageCount) setPage(pageCount) }, [page, pageCount, remote.loading, remote.error])
   const toggleSort = (key: string) => {
+    if (remote.remote && !remote.canSort(key)) { setFailure('API chưa hỗ trợ sắp xếp theo cột này.'); return }
+    if (remote.remote) setPage(1)
     setAscending(sortKey === key ? !ascending : true)
     setSortKey(key)
   }
-  const exportCsv = () => {
-    const content = [module.columns.map((column) => column.label), ...filteredRows.map((row) => module.columns.map((column) => String(row[column.key] ?? '')))]
+  const exportCsv = async () => {
+    let exportRows = filteredRows
+    if (remote.remote) { try { exportRows = await remote.exportRows() } catch (error) { setFailure(errorMessage(error)); return } }
+    const content = [module.columns.map((column) => column.label), ...exportRows.map((row) => module.columns.map((column) => String(row[column.key] ?? '')))]
       .map((line) => line.map((cell) => `"${cell.replaceAll('"', '""')}"`).join(',')).join('\n')
     const url = URL.createObjectURL(new Blob(['\ufeff', content], { type: 'text/csv;charset=utf-8' }))
     const anchor = document.createElement('a')
@@ -188,52 +214,63 @@ function RecordWorkspace({ module }: { module: ManagementModule }) {
     })) as ManagementRow
     saveValues(values)
   }
-  const saveValues = (values: ManagementRow) => {
+  const saveValues = async (values: ManagementRow) => {
+    if (remote.pending) return
+    setFailure('')
+    if (remote.remote) {
+      try { await remote.save({ values, initial: editing }) } catch (error) { setFailure(errorMessage(error)); return }
+    } else {
     const record: ManagementRow = editing
       ? { ...values, ...(editing.__id ? { __id: editing.__id } : {}) }
       : { ...values, __id: crypto.randomUUID() }
     setRows((current) => editing ? current.map((row) => row === editing ? record : row) : [record, ...current])
+    }
     setFormOpen(false)
     setEditing(null)
     setPage(1)
     setNotice(editing ? `Đã cập nhật ${module.entity}.` : `Đã thêm ${module.entity} mới.`)
     window.setTimeout(() => setNotice(''), 2600)
   }
-  const removeRecord = () => {
-    if (!deleteTarget) return
-    setRows((current) => current.filter((row) => row !== deleteTarget))
+  const removeRecord = async () => {
+    if (!deleteTarget || remote.pending) return
+    setFailure('')
+    if (remote.remote) {
+      try { await remote.remove(String(deleteTarget.__id)) } catch (error) { setFailure(errorMessage(error)); return }
+    } else setRows((current) => current.filter((row) => row !== deleteTarget))
     setDeleteTarget(null)
     setNotice(`Đã xóa ${module.entity}.`)
     window.setTimeout(() => setNotice(''), 2600)
   }
 
   return <section className={`record-page record-page-${module.id}`}>
-    <div className="page-title-row"><div><div className="record-breadcrumb">Quản lý cửa hàng <span>/</span> {module.title}</div><h1>{module.title}</h1><p>{module.description}</p></div><div className="record-actions"><button className="button button-secondary" type="button" onClick={exportCsv}><Download size={15} /> Xuất file</button><button className="button button-primary" type="button" onClick={() => { setEditing(null); setFormOpen(true) }}><Plus size={16} /> Thêm {module.entity}</button></div></div>
+    <div className="page-title-row"><div><div className="record-breadcrumb">Quản lý cửa hàng <span>/</span> {module.title}</div><h1>{module.title}</h1><p>{module.description}</p></div><div className="record-actions"><button className="button button-secondary" type="button" onClick={exportCsv}><Download size={15} /> Xuất file</button><button className="button button-primary" type="button" disabled={remote.remote && (remote.loading || Boolean(remote.error))} onClick={() => { setFailure(''); setEditing(null); setFormOpen(true) }}><Plus size={16} /> Thêm {module.entity}</button></div></div>
 
     {module.id === 'cashbook' && <div className="record-filters cashbook-tabs">{['Tiền mặt', 'Ngân hàng', 'Tổng quỹ'].map((tab) => <button type="button" key={tab} className={cashTab === tab ? 'active' : ''} onClick={() => setCashTab(tab)}>{tab}</button>)}{cashTab === 'Ngân hàng' && <a className="button button-secondary" href="/management/bank-accounts">Tài khoản ngân hàng</a>}</div>}
-    <div className="record-metrics">{module.metrics.map((metric) => <article className="record-metric" key={metric.label}><span>{metric.label}</span><strong>{metric.value}</strong><small>{metric.hint}</small></article>)}</div>
+    <div className="record-metrics">{module.metrics.map((item, index) => { const metric = remote.remote ? { ...item, value: index === 0 && !remote.loading && !remote.error ? String(remote.total) : '—', hint: index === 0 ? 'Theo bộ lọc hiện tại' : 'Chưa có báo cáo tổng hợp' } : item; return <article className="record-metric" key={metric.label}><span>{metric.label}</span><strong>{metric.value}</strong><small>{metric.hint}</small></article> })}</div>
 
     <section className="panel record-table-panel">
-      <div className="record-toolbar"><label className="search-field"><Search size={16} /><input aria-label={module.searchPlaceholder} value={query} onChange={(event) => { setQuery(event.target.value); setPage(1) }} placeholder={module.searchPlaceholder} /><kbd>⌘ K</kbd></label>{module.id === 'cashbook' && <div className="cashbook-date-filters"><label>Từ<input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} /></label><label>Đến<input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} /></label><select aria-label="Chi nhánh sổ quỹ" value={branchFilter} onChange={(event) => setBranchFilter(event.target.value)}><option>Tất cả chi nhánh</option><option>Mộc Store · Quận 1</option><option>Mộc Store · Quận 3</option></select></div>}<div className="record-filters"><button type="button" className={filter === 'Tất cả' ? 'active' : ''} onClick={() => { setFilter('Tất cả'); setPage(1) }}>Tất cả</button>{module.filters?.map((item) => <button type="button" key={item} className={filter === item ? 'active' : ''} onClick={() => { setFilter(item); setPage(1) }}>{item}</button>)}</div></div>
+      <div className="record-toolbar"><label className="search-field"><Search size={16} /><input aria-label={module.searchPlaceholder} value={query} onChange={(event) => { setQuery(event.target.value); setPage(1) }} placeholder={module.searchPlaceholder} /><kbd>⌘ K</kbd></label>{module.id === 'cashbook' && <div className="cashbook-date-filters"><label>Từ<input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} /></label><label>Đến<input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} /></label><select aria-label="Chi nhánh sổ quỹ" value={branchFilter} onChange={(event) => setBranchFilter(event.target.value)}><option>Tất cả chi nhánh</option><option>Mộc Store · Quận 1</option><option>Mộc Store · Quận 3</option></select></div>}<div className="record-filters"><button type="button" className={filter === 'Tất cả' ? 'active' : ''} onClick={() => { setFilter('Tất cả'); setPage(1) }}>Tất cả</button>{(remote.remote && module.id === 'customers' ? remote.groups.map((group) => group.name) : module.filters)?.map((item) => <button type="button" key={item} className={filter === item ? 'active' : ''} onClick={() => { setFilter(item); setPage(1) }}>{item}</button>)}</div></div>
       <div className="table-scroll"><table className="data-table record-table"><thead><tr>{module.columns.map((column) => <th key={column.key}><button type="button" onClick={() => toggleSort(column.key)}>{column.label}<span aria-hidden="true">{sortKey === column.key ? ascending ? ' ↑' : ' ↓' : ' ↕'}</span></button></th>)}<th aria-label="Thao tác" /></tr></thead><tbody>
-        {visibleRows.map((row, rowIndex) => <FragmentRow key={`${module.id}-${row.__id ?? row.code ?? row.name ?? row.employee ?? rowIndex}-${rowIndex}`} module={module} row={row} expanded={expandedRow === String(row.__id ?? row.code ?? row.name ?? rowIndex)} onExpand={() => setExpandedRow((current) => current === String(row.__id ?? row.code ?? row.name ?? rowIndex) ? null : String(row.__id ?? row.code ?? row.name ?? rowIndex))} onEdit={() => { setEditing(row); setFormOpen(true) }} onDelete={() => setDeleteTarget(row)} />)}
+        {visibleRows.map((row, rowIndex) => <FragmentRow key={`${module.id}-${row.__id ?? row.code ?? row.name ?? row.employee ?? rowIndex}-${rowIndex}`} module={module} row={row} expanded={expandedRow === String(row.__id ?? row.code ?? row.name ?? rowIndex)} onExpand={() => setExpandedRow((current) => current === String(row.__id ?? row.code ?? row.name ?? rowIndex) ? null : String(row.__id ?? row.code ?? row.name ?? rowIndex))} onEdit={() => { setFailure(''); setEditing(row); setFormOpen(true) }} onDelete={() => { setFailure(''); setDeleteTarget(row) }} />)}
       </tbody></table></div>
-      {filteredRows.length === 0 && <div className="empty-state"><Search size={23} /><strong>Không tìm thấy dữ liệu</strong><span>Thử thay đổi từ khóa hoặc bộ lọc.</span></div>}
-      <div className="table-footer"><span>Hiển thị <strong>{filteredRows.length ? (page - 1) * pageSize + 1 : 0}–{Math.min(page * pageSize, filteredRows.length)}</strong> trong <strong>{filteredRows.length}</strong> {module.entity}</span><div className="pagination"><button type="button" aria-label="Trang trước" disabled={page === 1} onClick={() => setPage((current) => current - 1)}><ChevronLeft size={16} /></button><button className="current-page" type="button">{page} / {pageCount}</button><button type="button" aria-label="Trang sau" disabled={page === pageCount} onClick={() => setPage((current) => current + 1)}><ChevronRight size={16} /></button></div></div>
+      {!remote.loading && !remote.error && filteredRows.length === 0 && <div className="empty-state"><Search size={23} /><strong>Không tìm thấy dữ liệu</strong><span>Thử thay đổi từ khóa hoặc bộ lọc.</span></div>}
+      {remote.remote && (remote.loading || remote.error) && <div className="empty-state" role={remote.error ? 'alert' : 'status'}><strong>{remote.error || 'Đang tải dữ liệu...'}</strong>{remote.error && <button className="button button-secondary" type="button" onClick={() => void remote.retry()}>Thử lại</button>}</div>}
+      <div className="table-footer" ref={footerRef}><span>Hiển thị <strong>{totalRows ? (page - 1) * pageSize + 1 : 0}–{remote.remote && remote.mobile ? rows.length : Math.min(page * pageSize, totalRows)}</strong> trong <strong>{totalRows}</strong> {module.entity}</span><div className="pagination"><button type="button" aria-label="Trang trước" disabled={page === 1} onClick={() => setPage((current) => current - 1)}><ChevronLeft size={16} /></button><button className="current-page" type="button">{page} / {pageCount}</button><button type="button" aria-label="Trang sau" disabled={page === pageCount} onClick={() => setPage((current) => current + 1)}><ChevronRight size={16} /></button></div></div>
     </section>
 
+    {failure && !formOpen && !deleteTarget && <div className="toast" role="alert">{failure}</div>}
     {notice && <div className="toast" role="status"><span className="toast-check">✓</span>{notice}</div>}
-    {formOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setFormOpen(false) }}><section className="modal-card record-dialog" role="dialog" aria-modal="true" aria-labelledby="record-dialog-title"><button className="modal-close" type="button" onClick={() => setFormOpen(false)} aria-label="Đóng"><X size={18} /></button><h2 id="record-dialog-title">{editing ? `Cập nhật ${module.entity}` : `Thêm ${module.entity}`}</h2><p>Thông tin được lưu trong dữ liệu demo trên thiết bị.</p>{module.id === 'menu-items' ? <ProductEditor key={String(editing?.code ?? 'new')} initial={editing} nextProductCode={editing ? String(editing.code) : nextCode(rows, 'M', 5)} onCancel={() => setFormOpen(false)} onSave={saveValues} /> : <form onSubmit={saveRecord} onChange={(event) => { if (module.id === 'invoices') updateInvoiceDue(event.currentTarget) }}><div className="record-form-grid">{module.fields.map((field) => {
-      const defaults = module.id === 'invoices' && field.key === 'table' ? getRoomNames() : field.options ?? (field.key === 'type' ? module.filters : field.key === 'status' ? [...new Set(rows.map((row) => String(row.status ?? '')).filter(Boolean))] : undefined)
+    {formOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) { setFormOpen(false); setFailure('') } }}><section className="modal-card record-dialog" role="dialog" aria-modal="true" aria-labelledby="record-dialog-title"><button className="modal-close" type="button" onClick={() => { setFormOpen(false); setFailure('') }} aria-label="Đóng"><X size={18} /></button><h2 id="record-dialog-title">{editing ? `Cập nhật ${module.entity}` : `Thêm ${module.entity}`}</h2><p>{remote.remote ? 'Thông tin được lưu trên hệ thống cửa hàng.' : 'Thông tin được lưu trong dữ liệu demo trên thiết bị.'}</p>{failure && <p className="form-error" role="alert">{failure}</p>}{module.id === 'menu-items' ? <ProductEditor key={String(editing?.code ?? 'new')} initial={editing} nextProductCode={editing ? String(editing.code) : remote.remote ? 'Tự động' : nextCode(rows, 'M', 5)} remote={remote.remote} categoryOptions={remote.categories.map((item) => item.name)} saving={remote.pending} onCreateCategory={remote.remote ? async (name) => { const category = await remote.createCategory(name); return category.name } : undefined} onCancel={() => { setFormOpen(false); setFailure('') }} onSave={saveValues} /> : <form onSubmit={saveRecord} onChange={(event) => { if (module.id === 'invoices') updateInvoiceDue(event.currentTarget) }}><div className="record-form-grid">{module.fields.map((field) => {
+      const defaults = remote.remote && module.id === 'customer-groups' && field.key === 'status' ? ['Đang hoạt động', 'Tạm ngưng'] : module.id === 'invoices' && field.key === 'table' ? getRoomNames() : field.options ?? (field.key === 'type' ? module.filters : field.key === 'status' ? [...new Set(rows.map((row) => String(row.status ?? '')).filter(Boolean))] : undefined)
       const defaultValue = editing?.[field.key] ?? (field.key === 'code' && module.id === 'invoices' ? nextCode(rows, 'HD', 6) : field.key === 'code' && module.id === 'cashbook' ? nextCode(rows, 'TTHD', 6) : defaults?.[0] ?? '')
       if (field.type === 'checkbox') return <label className="form-check" key={field.key}><input name={field.key} type="checkbox" defaultChecked={editing?.[field.key] === true} /><span>{field.label}</span></label>
       if (field.type === 'multi-select') return <MultiSelectField key={field.key} field={field} defaultValue={String(defaultValue || 'Tất cả chi nhánh')} />
       if (field.type === 'textarea') return <label className="form-label" key={field.key}>{field.label}<textarea name={field.key} defaultValue={String(defaultValue)} required={field.required} rows={3} /></label>
       if (field.type === 'select') return <label className="form-label" key={field.key}>{field.label}<select name={field.key} defaultValue={String(defaultValue)} required={field.required}>{defaults?.map((choice) => <option key={choice}>{choice}</option>)}</select></label>
       if (field.type === 'bank-picker') return <label className="form-label" key={field.key}>{field.label}<input name={field.key} list="bank-list" defaultValue={String(defaultValue)} required={field.required} /><datalist id="bank-list">{bankList.map((bank) => <option key={bank} value={bank} />)}</datalist></label>
-      return <label className="form-label" key={field.key}>{field.label}<input name={field.key} type={field.type === 'number' || field.type === 'tel' ? field.type : 'text'} defaultValue={String(defaultValue)} required={field.required} min={field.type === 'number' ? 0 : undefined} readOnly={field.readOnly} /></label>
-    })}</div><div className="modal-actions"><button className="button button-secondary" type="button" onClick={() => setFormOpen(false)}>Hủy</button><button className="button button-primary" type="submit">{editing ? 'Lưu thay đổi' : `Thêm ${module.entity}`}</button></div></form>}</section></div>}
-    {deleteTarget && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setDeleteTarget(null) }}><section className="modal-card delete-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-dialog-title"><button className="modal-close" type="button" onClick={() => setDeleteTarget(null)} aria-label="Đóng"><X size={18} /></button><h2 id="delete-dialog-title">Xóa {module.entity}?</h2><p>Bản ghi “{String(deleteTarget[module.columns[0].key] ?? '')}” sẽ bị xóa khỏi dữ liệu demo trên thiết bị.</p><div className="modal-actions"><button className="button button-secondary" type="button" onClick={() => setDeleteTarget(null)}>Hủy</button><button className="button button-danger" type="button" onClick={removeRecord}>Xóa bản ghi</button></div></section></div>}
+      return <label className="form-label" key={field.key}>{field.label}<input name={field.key} type={field.type === 'number' || field.type === 'tel' ? field.type : 'text'} defaultValue={String(defaultValue)} required={field.required} min={field.type === 'number' ? 0 : undefined} readOnly={field.readOnly || (remote.remote && (['orders', 'spent', 'members'].includes(field.key) || (field.key === 'points' && !remote.canManage)))} /></label>
+    })}</div><div className="modal-actions"><button className="button button-secondary" type="button" onClick={() => { setFormOpen(false); setFailure('') }}>Hủy</button><button className="button button-primary" type="submit" disabled={remote.pending}>{editing ? 'Lưu thay đổi' : `Thêm ${module.entity}`}</button></div></form>}</section></div>}
+    {deleteTarget && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) { setDeleteTarget(null); setFailure('') } }}><section className="modal-card delete-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-dialog-title"><button className="modal-close" type="button" onClick={() => { setDeleteTarget(null); setFailure('') }} aria-label="Đóng"><X size={18} /></button><h2 id="delete-dialog-title">Xóa {module.entity}?</h2><p>Bản ghi “{String(deleteTarget[module.columns[0].key] ?? '')}” {remote.remote ? 'sẽ bị xóa khỏi danh sách trên hệ thống.' : 'sẽ bị xóa khỏi dữ liệu demo trên thiết bị.'}</p>{failure && <p className="form-error" role="alert">{failure}</p>}<div className="modal-actions"><button className="button button-secondary" type="button" onClick={() => { setDeleteTarget(null); setFailure('') }}>Hủy</button><button className="button button-danger" type="button" disabled={remote.pending} onClick={() => void removeRecord()}>Xóa bản ghi</button></div></section></div>}
   </section>
 }
 
@@ -268,15 +305,16 @@ function MultiSelectField({ field, defaultValue }: { field: ManagementModule['fi
 }
 
 type ProductAttribute = { name: string; value: string }
-type ProductUnit = { name: string; ratio: number; cost: number; price: number }
+type ProductUnit = { name: string; ratio: number; cost: number; price: number; _costWasUnset?: boolean }
 
-function ProductEditor({ initial, nextProductCode, onCancel, onSave }: { initial: ManagementRow | null; nextProductCode: string; onCancel: () => void; onSave: (values: ManagementRow) => void }) {
+function ProductEditor({ initial, nextProductCode, onCancel, onSave, remote = false, categoryOptions = [], onCreateCategory, saving = false }: { initial: ManagementRow | null; nextProductCode: string; onCancel: () => void; onSave: (values: ManagementRow) => void; remote?: boolean; categoryOptions?: string[]; onCreateCategory?: (name: string) => Promise<string>; saving?: boolean }) {
   const [productType, setProductType] = useState(String(initial?.productType ?? 'Hàng hóa thường'))
   const [categories, setCategories] = useState<string[]>(() => {
+    if (remote) return categoryOptions
     try { return [...new Set(['Cà phê', 'Cacao', 'Trà', 'Bia', 'Đồ ăn', 'Khác', ...JSON.parse(prototypeStorage.getItem('fnb-product-groups') ?? '[]') as string[]])] } catch { return ['Cà phê', 'Cacao', 'Trà', 'Bia', 'Đồ ăn', 'Khác'] }
   })
   const [newCategory, setNewCategory] = useState('')
-  const [selectedCategory, setSelectedCategory] = useState(String(initial?.category ?? 'Cà phê'))
+  const [selectedCategory, setSelectedCategory] = useState(String(initial?.category ?? (remote ? categoryOptions[0] ?? '' : 'Cà phê')))
   const [baseUnit, setBaseUnit] = useState(String(initial?.baseUnit ?? 'Cái'))
   const [image, setImage] = useState(String(initial?.image ?? ''))
   const [attributes, setAttributes] = useState<ProductAttribute[]>(() => parseRows<ProductAttribute>(initial?.attributes))
@@ -286,13 +324,21 @@ function ProductEditor({ initial, nextProductCode, onCancel, onSave }: { initial
   const onImageChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
+    if (remote) { setError('Upload ảnh chưa được hỗ trợ trong chế độ API.'); return }
     if (!file.type.startsWith('image/')) { setError('Vui lòng chọn tệp hình ảnh.'); return }
     setCompressing(true); setError('')
     try { setImage(await compressImage(file)) } catch { setError('Không thể đọc hình ảnh đã chọn.') } finally { setCompressing(false) }
   }
-  const addCategory = () => {
+  const [creatingCategory, setCreatingCategory] = useState(false)
+  const addCategory = async () => {
     const value = (newCategory === '__open__' ? '' : newCategory).trim()
-    if (!value) return
+    if (!value || creatingCategory) return
+    if (onCreateCategory) {
+      setCreatingCategory(true); setError('')
+      try { const name = await onCreateCategory(value); setCategories((items) => [...new Set([...items, name])]); setSelectedCategory(name); setNewCategory('') }
+      catch (error) { setError(errorMessage(error)) } finally { setCreatingCategory(false) }
+      return
+    }
     const updated = [...new Set([...categories, value])]
     setCategories(updated); setSelectedCategory(value); setNewCategory('')
     try { prototypeStorage.setItem('fnb-product-groups', JSON.stringify(updated.filter((item) => !['Cà phê', 'Cacao', 'Trà', 'Bia', 'Đồ ăn', 'Khác'].includes(item)))) } catch { setError('Không thể lưu nhóm hàng mới trên thiết bị.') }
@@ -302,25 +348,25 @@ function ProductEditor({ initial, nextProductCode, onCancel, onSave }: { initial
     const data = new FormData(event.currentTarget)
     const value = (key: string) => String(data.get(key) ?? '').trim()
     const row: ManagementRow = { code: nextProductCode, name: value('name'), category: value('category'), productType, menuType: value('menuType'), price: Number(value('price')), status: value('status'), visible: data.get('visible') === 'on', extra: data.get('extra') === 'on', points: data.get('points') === 'on', image, baseUnit: baseUnit.trim() || 'Cái', attributes: JSON.stringify(attributes.filter((entry) => entry.name.trim())), units: JSON.stringify(units.filter((entry) => entry.name.trim() && entry.ratio > 0)) }
-    if (productType === 'Hàng hóa thường') { row.cost = Number(value('cost')) || 0; row.stock = Number(value('stock')) || 0 }
+    if (productType === 'Hàng hóa thường') { row.cost = remote && !value('cost') ? '' : Number(value('cost')) || 0; if (!remote) row.stock = Number(value('stock')) || 0 }
     onSave(row)
   }
   return <form onSubmit={submit} className="product-editor">
     <div className="record-form-grid">
       <label className="form-label">Mã hàng<input value={nextProductCode} readOnly /></label>
       <label className="form-label">Tên hàng<input name="name" required defaultValue={String(initial?.name ?? '')} /></label>
-      <label className="form-label">Nhóm hàng<select name="category" value={selectedCategory} onChange={(event) => { if (event.target.value === '__create__') setNewCategory('__open__'); else setSelectedCategory(event.target.value) }}><option value="" disabled>Chọn nhóm hàng</option>{categories.map((item) => <option key={item}>{item}</option>)}<option value="__create__">＋ Tạo nhóm hàng mới</option></select>{newCategory !== '' && <span className="inline-create"><input aria-label="Tên nhóm hàng mới" placeholder="Tên nhóm hàng" value={newCategory === '__open__' ? '' : newCategory} onChange={(event) => setNewCategory(event.target.value)} /><button type="button" className="button button-secondary" onClick={addCategory}>Thêm nhóm</button></span>}</label>
+      <label className="form-label">Nhóm hàng<select name="category" value={selectedCategory} onChange={(event) => { if (event.target.value === '__create__') setNewCategory('__open__'); else setSelectedCategory(event.target.value) }}><option value="" disabled>Chọn nhóm hàng</option>{categories.map((item) => <option key={item}>{item}</option>)}<option value="__create__">＋ Tạo nhóm hàng mới</option></select>{newCategory !== '' && <span className="inline-create"><input aria-label="Tên nhóm hàng mới" placeholder="Tên nhóm hàng" value={newCategory === '__open__' ? '' : newCategory} onChange={(event) => setNewCategory(event.target.value)} /><button type="button" className="button button-secondary" disabled={creatingCategory} onClick={() => void addCategory()}>Thêm nhóm</button></span>}</label>
       <label className="form-label">Loại hàng<select value={productType} onChange={(event) => setProductType(event.target.value)}><option>Hàng hóa thường</option><option>Chế biến</option></select></label>
       <label className="form-label">Loại thực đơn<select name="menuType" defaultValue={String(initial?.menuType ?? 'Đồ uống')}><option>Đồ uống</option><option>Đồ ăn</option><option>Khác</option></select></label>
       <label className="form-label">Giá bán (₫)<input name="price" type="number" min="0" required defaultValue={String(initial?.price ?? '')} /></label>
-      {productType === 'Hàng hóa thường' && <><label className="form-label">Giá vốn (₫)<input name="cost" type="number" min="0" defaultValue={String(initial?.cost ?? '')} /></label><label className="form-label">Tồn kho<input name="stock" type="number" min="0" defaultValue={String(initial?.stock ?? 0)} /></label></>}
+      {productType === 'Hàng hóa thường' && <><label className="form-label">Giá vốn (₫)<input name="cost" type="number" min="0" defaultValue={String(initial?.cost ?? '')} /></label><label className="form-label">Tồn kho<input name="stock" type="number" min="0" readOnly={remote} placeholder={remote ? 'Chưa có dữ liệu tồn kho' : undefined} defaultValue={remote ? '' : String(initial?.stock ?? 0)} /></label></>}
       <label className="form-label">Trạng thái<select name="status" defaultValue={String(initial?.status ?? 'Đang bán')}><option>Đang bán</option><option>Tạm hết</option></select></label>
     </div>
     <div className="product-checks"><label><input name="visible" type="checkbox" defaultChecked={initial?.visible !== false} /> Hiển thị trong thực đơn</label><label><input name="extra" type="checkbox" defaultChecked={initial?.extra === true} /> Là món thêm</label><label><input name="points" type="checkbox" defaultChecked={initial?.points !== false} /> Tích điểm</label></div>
-    <label className="form-label product-image-field">Hình ảnh sản phẩm<input type="file" accept="image/*" onChange={onImageChange} /><small>{compressing ? 'Đang nén ảnh...' : 'Ảnh được thu nhỏ tối đa 600px và nén trước khi lưu trên thiết bị.'}</small>{image && <span className="product-image-preview"><img src={image} alt="Xem trước sản phẩm" /><button className="button button-secondary" type="button" onClick={() => setImage('')}>Xóa ảnh</button></span>}</label>
+    <label className="form-label product-image-field">Hình ảnh sản phẩm<input type="file" accept="image/*" disabled={remote} onChange={onImageChange} /><small>{remote ? 'Upload ảnh chưa được hỗ trợ trong chế độ API. Có thể xóa ảnh hiện có.' : compressing ? 'Đang nén ảnh...' : 'Ảnh được thu nhỏ tối đa 600px và nén trước khi lưu trên thiết bị.'}</small>{image && <span className="product-image-preview"><img src={image} alt="Xem trước sản phẩm" /><button className="button button-secondary" type="button" onClick={() => setImage('')}>Xóa ảnh</button></span>}</label>
     <section className="product-extra-editor"><div><strong>Thuộc tính</strong><button className="button button-secondary" type="button" onClick={() => setAttributes((current) => [...current, { name: '', value: '' }])}>+ Thêm thuộc tính</button></div>{attributes.map((entry, index) => <div className="inline-edit-row" key={`attr-${index}`}><input aria-label="Tên thuộc tính" placeholder="Ví dụ: Size" value={entry.name} onChange={(event) => setAttributes((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item))} /><input aria-label="Giá trị thuộc tính" placeholder="Ví dụ: M, L, XL" value={entry.value} onChange={(event) => setAttributes((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, value: event.target.value } : item))} /><button type="button" aria-label="Xóa thuộc tính" onClick={() => setAttributes((current) => current.filter((_, itemIndex) => itemIndex !== index))}>×</button></div>)}</section>
-    <section className="product-extra-editor"><div><strong>Đơn vị tính</strong><span>Đơn vị cơ bản có thể đổi khi tạo hoặc chỉnh sửa món.</span></div><label className="form-label base-unit-field">Đơn vị cơ bản<input aria-label="Đơn vị cơ bản" value={baseUnit} onChange={(event) => setBaseUnit(event.target.value)} placeholder="Ví dụ: Lon, Chai, Ly" required /></label><div className="product-unit-list-heading"><strong>Đơn vị quy đổi</strong><button className="button button-secondary" type="button" onClick={() => setUnits((current) => [...current, { name: '', ratio: 1, cost: Number(initial?.cost ?? 0), price: Number(initial?.price ?? 0) }])}>+ Thêm đơn vị</button></div>{units.map((unit, index) => <div className="unit-editor-row" key={`unit-${index}`}><input aria-label="Tên đơn vị" placeholder="Ví dụ: Thùng" value={unit.name} onChange={(event) => setUnits((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item))} /><label>Quy đổi<input aria-label={`Số ${baseUnit || 'đơn vị cơ bản'} trong đơn vị quy đổi`} type="number" min="1" value={unit.ratio} onChange={(event) => setUnits((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, ratio: Number(event.target.value) } : item))} /></label><label>Giá bán<input aria-label="Giá bán đơn vị" type="number" min="0" value={unit.price} onChange={(event) => setUnits((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, price: Number(event.target.value) } : item))} /></label><label>Giá vốn<input aria-label="Giá vốn đơn vị" type="number" min="0" disabled={productType === 'Chế biến'} value={unit.cost} onChange={(event) => setUnits((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, cost: Number(event.target.value) } : item))} /></label><button type="button" aria-label="Xóa đơn vị" onClick={() => setUnits((current) => current.filter((_, itemIndex) => itemIndex !== index))}>×</button><small>Số lượng quy đổi tính theo đơn vị cơ bản “{baseUnit || 'Cái'}”. Sẽ tạo đơn vị con “{String(initial?.name ?? 'Tên hàng')} · {unit.name || 'Đơn vị mới'}”.</small></div>)}</section>
-    {error && <p className="form-error" role="alert">{error}</p>}<div className="modal-actions"><button className="button button-secondary" type="button" onClick={onCancel}>Hủy</button><button className="button button-primary" type="submit">Lưu món</button></div>
+    <section className="product-extra-editor"><div><strong>Đơn vị tính</strong><span>Đơn vị cơ bản có thể đổi khi tạo hoặc chỉnh sửa món.</span></div><label className="form-label base-unit-field">Đơn vị cơ bản<input aria-label="Đơn vị cơ bản" value={baseUnit} onChange={(event) => setBaseUnit(event.target.value)} placeholder="Ví dụ: Lon, Chai, Ly" required /></label><div className="product-unit-list-heading"><strong>Đơn vị quy đổi</strong><button className="button button-secondary" type="button" onClick={() => setUnits((current) => [...current, { name: '', ratio: 1, cost: Number(initial?.cost ?? 0), price: Number(initial?.price ?? 0) }])}>+ Thêm đơn vị</button></div>{units.map((unit, index) => <div className="unit-editor-row" key={`unit-${index}`}><input aria-label="Tên đơn vị" placeholder="Ví dụ: Thùng" value={unit.name} onChange={(event) => setUnits((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item))} /><label>Quy đổi<input aria-label={`Số ${baseUnit || 'đơn vị cơ bản'} trong đơn vị quy đổi`} type="number" min={remote ? "0.001" : "1"} step={remote ? "0.001" : undefined} value={unit.ratio} onChange={(event) => setUnits((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, ratio: Number(event.target.value) } : item))} /></label><label>Giá bán<input aria-label="Giá bán đơn vị" type="number" min="0" value={unit.price} onChange={(event) => setUnits((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, price: Number(event.target.value) } : item))} /></label><label>Giá vốn<input aria-label="Giá vốn đơn vị" type="number" min="0" disabled={productType === 'Chế biến'} value={unit.cost} onChange={(event) => setUnits((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, cost: Number(event.target.value) } : item))} /></label><button type="button" aria-label="Xóa đơn vị" onClick={() => setUnits((current) => current.filter((_, itemIndex) => itemIndex !== index))}>×</button><small>Số lượng quy đổi tính theo đơn vị cơ bản “{baseUnit || 'Cái'}”. Sẽ tạo đơn vị con “{String(initial?.name ?? 'Tên hàng')} · {unit.name || 'Đơn vị mới'}”.</small></div>)}</section>
+    {error && <p className="form-error" role="alert">{error}</p>}<div className="modal-actions"><button className="button button-secondary" type="button" onClick={onCancel}>Hủy</button><button className="button button-primary" type="submit" disabled={saving || creatingCategory || compressing}>Lưu món</button></div>
   </form>
 }
 

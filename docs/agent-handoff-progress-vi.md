@@ -7,7 +7,7 @@
 
 ## Tóm tắt tiến độ
 
-**Cập nhật frontend:** Đã chuẩn bị HTTP repositories/auth/query hooks, tách storage prototype và tạo 14 visual baselines. Unit/typecheck/build/visual local đã PASS; UI/CSS giữ nguyên. Form chưa nối API và chưa có login/auth guard vì đang chờ duyệt các thay đổi nội dung/trường chỉ đọc theo UI freeze. Đọc [frontend-api-progress-vi.md](./frontend-api-progress-vi.md) để tiếp tục; không hướng dẫn bật HTTP như một bản tích hợp hoàn chỉnh.
+**Cập nhật frontend:** Người dùng đã duyệt ngoại lệ UI giới hạn. Đã nối login/auth guard, Món, tạo nhóm hàng trong dropdown, Khách hàng và Nhóm khách với API; bật bằng VITE_USE_MOCK=false. 19 unit tests, typecheck/build, 14 visual tests (0 pixel diff) và 4 E2E browser → API → PostgreSQL native tạm 18.3 PASS. CSS cũ giữ nguyên, chỉ thêm auth selectors. Các trang khác/POS vẫn demo và có thông báo; không coi POS đã tích hợp. Xem [frontend-api-progress-vi.md](./frontend-api-progress-vi.md) để chạy và bàn giao.
 
 Đã thêm nền tảng API Go theo hướng modular monolith, migration PostgreSQL, authentication, tenant isolation bằng RLS, API CRUD Món/Nhóm hàng/Khách hàng/Nhóm khách và workflow CI backend. Frontend hiện có không bị chỉnh sửa, vẫn dùng dữ liệu prototype. PostgreSQL native là quy trình local chính; Docker Compose chỉ tùy chọn.
 
@@ -48,7 +48,7 @@ Test vòng đời authentication nằm tại [apps/api/tests/auth_integration_te
 4. Không rollback database cửa hàng đang dùng. Test round-trip chỉ thao tác trên database ngẫu nhiên do chính test tạo.
 5. Khi thay đổi schema/RLS, cấu hình lại biến test DB và chạy tenant isolation test bằng runtime role `fnb_app`.
 6. Đọc [API contract](./catalog-customers-api.md) và [ADR-002](./ADR-002-catalog-customers.md) trước khi viết frontend adapter. Không gửi tenant_id/store_id/SKU; không gửi base64 vào image_url.
-7. Sau khi người dùng chủ động commit/push, kiểm tra workflow CI PostgreSQL 16. Không báo CI xanh khi chưa chạy. Trước khi nối/refactor frontend, tạo visual baseline 7 routes ở desktop/mobile theo UI freeze.
+7. Sau khi người dùng chủ động commit/push, kiểm tra workflow CI PostgreSQL 16. Không báo CI xanh khi chưa chạy. Visual baseline 7 routes × desktop/mobile đã có; mọi refactor tiếp theo phải giữ so sánh PASS.
 
 ### P1 — Hoàn thiện SQLC và data access
 
@@ -58,7 +58,7 @@ Test vòng đời authentication nằm tại [apps/api/tests/auth_integration_te
 
 ### P2 — Tiếp tục nghiệp vụ theo phạm vi được duyệt
 
-- Chưa triển khai đầy đủ POS, checkout, payment provider, inventory hoặc upload ảnh. API sản phẩm/khách hàng đã có; frontend HTTP integration chưa có.
+- Chưa triển khai đầy đủ POS, checkout, payment provider, inventory hoặc upload ảnh. API sản phẩm/khách hàng và frontend HTTP integration cho Món/Khách/Nhóm khách đã có.
 - Trước khi làm order/payment, thiết kế transaction, idempotency và lưu `order_items` dạng record chuẩn hóa; không lưu danh sách món thành chuỗi hiển thị.
 - Tiếp theo tạo visual baseline rồi nối frontend từng module theo kế hoạch đã duyệt, giữ nguyên UI/CSS; không thay toàn bộ localStorage khi chưa có adapter/mock mode và kiểm tra hồi quy.
 - Những phần nghiệp vụ cần đổi UI phải được nêu đề xuất và chờ người dùng duyệt trước.

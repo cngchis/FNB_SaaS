@@ -77,7 +77,7 @@ Foundation checks were previously confirmed by the user. The agent additionally 
 ## Out of scope / follow-up
 
 - Order and payment endpoints, idempotent POS checkout, and payment-provider integrations.
-- Frontend API wiring; backend product/customer repository endpoints are implemented.
+- Frontend wiring now covers menu items, inline category creation, customers and customer groups, with login/auth guard and native browser/API/DB E2E. Other modules and POS remain prototype; see [frontend integration progress](./frontend-api-progress-vi.md).
 - Granular permission enforcement, membership management, and multi-store switching within an active session.
 - Extending SQLC-generated query usage to session repositories.
 - Executing the configured backend CI and adding frontend visual baseline automation before UI wiring.
