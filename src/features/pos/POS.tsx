@@ -1,10 +1,10 @@
-import { useMemo, useState } from 'react'
-import { ArrowDownToLine, Banknote, Check, ChevronDown, ChevronLeft, CircleHelp, Clock3, CreditCard, Minus, Plus, QrCode, Search, ShoppingBag, Trash2, Wifi, WifiOff, X } from 'lucide-react'
+import { useMemo, useState, type FormEvent } from 'react'
+import { ArrowDownToLine, Banknote, Check, ChevronDown, CircleHelp, Clock3, CreditCard, Minus, Plus, QrCode, ReceiptText, Search, ShoppingBag, Trash2, Wifi, WifiOff, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { formatCurrency, products, recentOrders } from '../../services/mockData'
 import { createMockOrder, getOfflineOrderQueue, simulateOfflineOrderSync } from '../../services/mockCheckout'
 import { usePosStore } from '../../stores/posStore'
-import type { Product } from '../../types'
+import type { CartLine, Product } from '../../types'
 import { ProductArtwork } from '../../components/ProductArtwork'
 import { managementModules, type ManagementRow } from '../management/moduleConfig'
 
@@ -39,6 +39,10 @@ export function POS() {
   const [ordersOpen, setOrdersOpen] = useState(false)
   const [paymentOptionsOpen, setPaymentOptionsOpen] = useState(false)
   const [cartExpanded, setCartExpanded] = useState(false)
+  const [catalogTab, setCatalogTab] = useState<'tables' | 'menu'>('tables')
+  const [temporaryOpen, setTemporaryOpen] = useState(false)
+  const [newCustomerOpen, setNewCustomerOpen] = useState(false)
+  const [paidAmount, setPaidAmount] = useState('')
   const catalogProducts = useMemo(() => loadCatalogProducts(), [])
   const categories = useMemo(() => ['Tất cả', ...new Set(catalogProducts.map((product) => product.category))], [catalogProducts])
   const { items, discount, note, customer, table, orderCode, add, setQuantity, remove, setDiscount, setNote, setCustomer, setTable, nextOrder, clear } = usePosStore()
@@ -49,15 +53,24 @@ export function POS() {
       return names.length ? names : ['Mang về', 'Bàn 01', 'Bàn 02', 'Bàn 03']
     } catch { return ['Mang về', 'Bàn 01', 'Bàn 02', 'Bàn 03'] }
   })
-  const [customers] = useState(() => {
+  const [customers, setCustomers] = useState(() => {
     try {
       const records: unknown = JSON.parse(localStorage.getItem('fnb-management:customers') ?? '[]')
       const names = Array.isArray(records) ? records.map((record) => typeof record === 'object' && record !== null && 'name' in record ? String(record.name) : '').filter(Boolean) : []
-      return ['Khách lẻ', ...names]
-    } catch { return ['Khách lẻ'] }
+      return ['Khách lẻ', 'Anh Nam', 'Chị Như', ...names.filter((name) => !['Anh Nam', 'Chị Như'].includes(name))]
+    } catch { return ['Khách lẻ', 'Anh Nam', 'Chị Như'] }
   })
   const subtotal = items.reduce((total, line) => total + line.product.price * line.quantity, 0)
   const total = Math.max(0, subtotal - discount)
+  const paidInCart = Math.min(total, Math.max(0, Number(paidAmount) || 0))
+  const debt = Math.max(0, total - paidInCart)
+  const customerDebt = useMemo(() => {
+    try {
+      const saved: unknown = JSON.parse(localStorage.getItem('fnb-management:invoices') ?? 'null')
+      if (!Array.isArray(saved)) return 0
+      return saved.filter((row): row is Record<string, unknown> => typeof row === 'object' && row !== null && String(row.customer ?? '') === customer).reduce((sum, row) => sum + Math.max(0, Number(row.due ?? row.amount ?? 0) - Number(row.paid ?? 0)), 0)
+    } catch { return 0 }
+  }, [customer, receipt])
   const visibleProducts = useMemo(() => catalogProducts.filter((product) => {
     const matchesSearch = `${product.name} ${product.sku}`.toLocaleLowerCase('vi').includes(search.toLocaleLowerCase('vi'))
     return matchesSearch && (category === 'Tất cả' || product.category === category)
@@ -68,13 +81,15 @@ export function POS() {
     const order = await createMockOrder({ total, paymentMethod: payment ?? 'cash', offline })
     const now = new Date()
     const date = new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).format(now)
-    const itemSummary = items.map(({ product, quantity }) => `${product.name} ×${quantity}`).join(' · ')
-    const paidAmount = Math.min(received, total)
-    const paidStatus = paidAmount >= total ? 'Đã thanh toán' : 'Chờ thanh toán'
-    const invoiceCode = appendManagementRecord('invoices', 'HD', 6, { table, order: orderCode, customer, items: itemSummary, note, amount: subtotal, discount, due: total, paid: paidAmount, date, branch: 'Mộc Store · Quận 1', receiver: 'Thu ngân A', creator: 'Thu ngân A', method: payment === 'qr' ? 'Chuyển khoản' : 'Tiền mặt', status: paidStatus })
-    appendManagementRecord('cashbook', 'TTHD', 6, { status: paidStatus, voucher: 'Phiếu Thu', amount: paidAmount, category: 'Thu tiền khách hàng', payerGroup: 'Khách hàng', payer: customer === 'Khách lẻ' ? '' : customer, method: payment === 'qr' ? 'Chuyển khoản' : 'Tiền mặt', branch: 'Mộc Store · Quận 1', creator: 'Thu ngân A', date, note: `Thanh toán hóa đơn ${invoiceCode} · ${table} · ${itemSummary}${note ? ` · ${note}` : ''}` })
+    const itemDetails = items.map(({ product, quantity }) => ({ code: product.sku, name: product.name, quantity, price: product.price, amount: product.price * quantity }))
+    const itemSummary = JSON.stringify(itemDetails)
+    const receivedAmount = Math.min(received, total)
+    const paidStatus = receivedAmount >= total ? 'Đã thanh toán' : receivedAmount > 0 ? 'Thanh toán một phần' : 'Chưa thanh toán'
+    const invoiceCode = appendManagementRecord('invoices', 'HD', 6, { table, order: orderCode, customer, items: itemSummary, note, amount: subtotal, discount, due: total, paid: receivedAmount, date, branch: 'Mộc Store · Quận 1', receiver: 'Thu ngân A', creator: 'Thu ngân A', method: payment === 'qr' ? 'Chuyển khoản' : 'Tiền mặt', status: paidStatus })
+    if (receivedAmount > 0) appendManagementRecord('cashbook', 'TTHD', 6, { status: paidStatus, voucher: 'Phiếu Thu', amount: receivedAmount, category: 'Thu tiền khách hàng', payerGroup: 'Khách hàng', payer: customer === 'Khách lẻ' ? '' : customer, method: payment === 'qr' ? 'Chuyển khoản' : 'Tiền mặt', branch: 'Mộc Store · Quận 1', creator: 'Thu ngân A', date, note: `Thanh toán hóa đơn ${invoiceCode} · ${table} · ${items.map(({ product, quantity }) => `${product.name} ×${quantity}`).join(' · ')}${note ? ` · ${note}` : ''}` })
     if (order.queuedForSync) setQueuedOrders((current) => [order.orderCode, ...current])
     setReceipt(order.orderCode)
+    setPaidAmount('')
     setPayment(null)
     nextOrder()
     clear()
@@ -98,39 +113,41 @@ export function POS() {
         <button className="pos-brand" type="button" aria-label="Về màn hình bán hàng"><span className="brand-mark">m</span></button>
         <button className="pos-side-button selected" type="button" aria-label="Bán hàng"><ShoppingBag size={19} /></button>
         <button className="pos-side-button" type="button" aria-label="Đơn hàng" onClick={() => setOrdersOpen(true)}><Clock3 size={19} /></button>
+        <button className="pos-side-button" type="button" aria-label="Xem hóa đơn tạm tính" title="Xem hóa đơn tạm tính" onClick={() => setTemporaryOpen(true)}><ReceiptText size={19} /></button>
         <Link className="pos-side-button" to="/management" aria-label="Quản lý"><CreditCard size={19} /></Link>
         <div className="pos-side-bottom"><button className="pos-side-button" type="button" aria-label="Trợ giúp" title="Chọn sản phẩm, kiểm tra giỏ hàng rồi chọn phương thức thanh toán."><CircleHelp size={19} /></button><div className="avatar">CH</div></div>
       </aside>
 
       <main className="pos-catalog">
-        <header className="pos-topbar"><div className="pos-page-heading"><Link to="/management" className="pos-back" aria-label="Quay lại"><ChevronLeft size={19} /></Link><div><strong>Bán hàng POS</strong><span>Mộc Store · Quận 1</span></div></div><div className="pos-top-actions"><button className={`pos-connect ${offline ? 'disconnected' : ''}`} type="button" onClick={() => setOffline((value) => !value)}>{offline ? <WifiOff size={15} /> : <Wifi size={15} />} {offline ? 'Offline' : 'Online'}</button><span className="pos-time">05 Th11 2026</span><button className="icon-button" type="button" aria-label="Lịch sử đơn" onClick={() => setOrdersOpen(true)}><Clock3 size={18} /></button><span className="pos-mobile-avatar">CH</span></div></header>
+        <header className="pos-topbar"><div className="pos-page-heading"><div><strong>Bán hàng POS</strong><span>Mộc Store · Quận 1</span></div></div><div className="pos-top-actions"><button className={`pos-connect ${offline ? 'disconnected' : ''}`} type="button" onClick={() => setOffline((value) => !value)}>{offline ? <WifiOff size={15} /> : <Wifi size={15} />} {offline ? 'Offline' : 'Online'}</button><span className="pos-time">05 Th11 2026</span><button className="icon-button" type="button" aria-label="Lịch sử đơn" onClick={() => setOrdersOpen(true)}><Clock3 size={18} /></button><span className="pos-mobile-avatar">CH</span></div></header>
 
         {offline && <section className="offline-banner"><span className="offline-symbol"><WifiOff size={18} /></span><div><strong>POS vẫn hoạt động khi offline</strong><p>Đơn hàng sẽ được lưu trên thiết bị và đồng bộ khi có kết nối.</p></div><span className="offline-queue-count">{queuedOrders.length} đơn chờ đồng bộ</span></section>}
         {!offline && queuedOrders.length > 0 && <section className="sync-banner"><span><ArrowDownToLine size={16} /> {queuedOrders.length} đơn đang chờ xử lý · dữ liệu demo lưu trên thiết bị</span><button type="button" disabled={syncing} onClick={syncDemoQueue}>{syncing ? 'Đang xử lý...' : 'Mô phỏng đồng bộ'}</button></section>}
 
-        <div className="catalog-heading"><div><h1>Chọn sản phẩm</h1><p>Chạm vào sản phẩm để thêm vào đơn hàng</p></div><button className="catalog-action" type="button" onClick={() => setOrdersOpen(true)}><Clock3 size={16} /> Đơn gần đây</button></div>
-        <label className="pos-search"><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm sản phẩm, SKU hoặc quét barcode..." /><kbd>⌘ K</kbd></label>
-        <div className="category-tabs" role="tablist" aria-label="Danh mục sản phẩm">{categories.map((item) => <button key={item} type="button" role="tab" aria-selected={category === item} className={category === item ? 'active' : ''} onClick={() => setCategory(item)}>{item}</button>)}</div>
-        <div className="products-grid">{visibleProducts.map((product) => <ProductCard key={product.id} product={product} onAdd={add} />)}</div>
-        {visibleProducts.length === 0 && <div className="empty-state product-empty"><Search size={24} /><strong>Không có sản phẩm phù hợp</strong><span>Kiểm tra từ khóa tìm kiếm hoặc danh mục.</span></div>}
+        <div className="pos-workflow-tabs" role="tablist" aria-label="Chọn bàn hoặc thực đơn"><button type="button" role="tab" aria-selected={catalogTab === 'tables'} className={catalogTab === 'tables' ? 'active' : ''} onClick={() => setCatalogTab('tables')}>Phòng / bàn</button><button type="button" role="tab" aria-selected={catalogTab === 'menu'} className={catalogTab === 'menu' ? 'active' : ''} onClick={() => setCatalogTab('menu')}>Thực đơn</button><button className="catalog-action" type="button" onClick={() => setOrdersOpen(true)}><Clock3 size={15} /> Đơn gần đây</button></div>
+        {catalogTab === 'tables' ? <section className="pos-table-picker"><div><h1>Chọn phòng / bàn</h1><p>Đang chọn: <strong>{table || 'Mang về'}</strong>. Nếu chưa chọn bàn, đơn sẽ được tính là mang về.</p></div><div className="pos-table-grid">{rooms.map((room) => <button key={room} type="button" className={table === room ? 'active' : ''} onClick={() => { setTable(room); setCatalogTab('menu') }}><span>{room === 'Mang về' ? <ShoppingBag size={19} /> : room.replace('Bàn ', '')}</span><strong>{room}</strong></button>)}</div><button className="button button-primary" type="button" onClick={() => setCatalogTab('menu')}>Tiếp tục chọn món · {table || 'Mang về'}</button></section> : <><div className="pos-menu-toolbar"><label className="pos-search"><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm sản phẩm, SKU hoặc quét barcode..." /><kbd>⌘ K</kbd></label><span className="pos-selected-table">{table || 'Mang về'}</span></div><div className="category-tabs" role="tablist" aria-label="Danh mục sản phẩm">{categories.map((item) => <button key={item} type="button" role="tab" aria-selected={category === item} className={category === item ? 'active' : ''} onClick={() => setCategory(item)}>{item}</button>)}</div><div className="products-grid">{visibleProducts.map((product) => <ProductCard key={product.id} product={product} onAdd={add} />)}</div>{visibleProducts.length === 0 && <div className="empty-state product-empty"><Search size={24} /><strong>Không có sản phẩm phù hợp</strong><span>Kiểm tra từ khóa tìm kiếm hoặc danh mục.</span></div>}</>}
       </main>
 
       <aside className={`cart-panel ${cartExpanded ? 'expanded' : ''}`}>
         <div className="mobile-cart-handle" />
         <div className="cart-header"><button className="cart-title-button" type="button" onClick={() => setCartExpanded((expanded) => !expanded)} aria-expanded={cartExpanded}><div><h2 className="cart-title-desktop">{orderCode}: {table}</h2><h2 className="cart-title-mobile">{orderCode}: {table}</h2><p className="cart-count-desktop">{items.reduce((totalCount, item) => totalCount + item.quantity, 0)} sản phẩm</p><p className="cart-items-mobile">{items.map(({ product, quantity }) => `${product.name} ×${quantity}`).join('  ·  ') || 'Chọn sản phẩm để bắt đầu'}</p></div><ChevronDown size={17} className="mobile-cart-chevron" /></button><button className="cart-clear" type="button" onClick={clear} disabled={items.length === 0}><Trash2 size={16} /> Xóa</button></div>
-        <div className="mobile-cart-summary"><div><span>Tổng thanh toán</span><strong>{formatCurrency(total)}</strong></div><button type="button" disabled={!items.length} onClick={() => setPaymentOptionsOpen(true)}>Thanh toán</button></div>
-        <div className="order-type"><span className="order-type-icon"><ShoppingBag size={15} /></span><span>Đơn hàng {orderCode}</span><span className="order-type-mode">Bán tại quầy</span></div>
-        <div className="cart-metadata"><label>Khách hàng<input list="pos-customer-list" value={customer} onChange={(event) => setCustomer(event.target.value)} /><datalist id="pos-customer-list">{customers.map((item) => <option key={item} value={item} />)}</datalist></label><label>Phòng / bàn<select value={table} onChange={(event) => setTable(event.target.value)}>{rooms.map((room) => <option key={room}>{room}</option>)}</select></label></div>
+        <div className="mobile-cart-summary"><div><span>Tổng thanh toán</span><strong>{formatCurrency(total)}</strong></div><div className="mobile-cart-actions"><button type="button" disabled={!items.length} onClick={() => setTemporaryOpen(true)}>Tạm tính</button><button type="button" disabled={!items.length} onClick={() => setPaymentOptionsOpen(true)}>Thanh toán</button></div></div>
+        <div className="order-type"><span className="order-type-icon"><ShoppingBag size={15} /></span><span>{orderCode}: {table || 'Mang về'}</span></div>
+        <div className="cart-metadata"><label>Khách hàng<select value={customer} onChange={(event) => { if (event.target.value === '__create__') setNewCustomerOpen(true); else setCustomer(event.target.value) }}>{customers.map((item) => <option key={item}>{item}</option>)}<option value="__create__">＋ Tạo mới khách hàng</option></select></label></div>
         <div className="cart-lines">{items.map(({ product, quantity }) => <CartItem key={product.id} product={product} quantity={quantity} onChange={setQuantity} onRemove={remove} />)}{items.length === 0 && <div className="cart-empty"><span className="cart-empty-icon"><ShoppingBag size={22} /></span><strong>Đơn hàng đang trống</strong><p>Chọn sản phẩm để bắt đầu tạo đơn.</p></div>}</div>
         <div className="cart-note"><label htmlFor="order-note">Ghi chú đơn hàng</label><textarea id="order-note" value={note} onChange={(event) => setNote(event.target.value)} placeholder="Thêm ghi chú..." rows={2} /></div>
         <div className="discount-row"><span>Giảm giá</span><label><input type="number" min="0" max={subtotal} value={discount || ''} onChange={(event) => setDiscount(Math.min(subtotal, Number(event.target.value) || 0))} placeholder="0" /><span>₫</span></label></div>
-        <div className="totals"><div><span>Tạm tính</span><strong>{formatCurrency(subtotal)}</strong></div>{discount > 0 && <div><span>Giảm giá</span><strong className="discount-amount">−{formatCurrency(discount)}</strong></div>}<div className="total-line"><strong>Tổng thanh toán</strong><strong>{formatCurrency(total)}</strong></div></div>
+        <label className="cart-paid-field">Khách thanh toán<input type="number" min="0" max={total} value={paidAmount} onChange={(event) => setPaidAmount(event.target.value)} placeholder="0 ₫" /></label>
+        <div className="totals"><div><span>Tạm tính</span><strong>{formatCurrency(subtotal)}</strong></div>{discount > 0 && <div><span>Giảm giá</span><strong className="discount-amount">−{formatCurrency(discount)}</strong></div>}<div className="total-line"><strong>Khách cần trả</strong><strong>{formatCurrency(total)}</strong></div><div className="debt-line"><span>Nợ hóa đơn này</span><strong>{formatCurrency(debt)}</strong></div>{customerDebt > 0 && <div className="debt-line"><span>Nợ trước đó · {customer}</span><strong>{formatCurrency(customerDebt)}</strong></div>}</div>
+        <button className="cart-estimate-button" type="button" disabled={!items.length} onClick={() => setTemporaryOpen(true)}><ReceiptText size={16} /> Tạm tính</button>
         <div className="payment-actions"><button className="pay-cash" type="button" disabled={!items.length} onClick={() => beginPayment('cash')}><Banknote size={18} /> Tiền mặt</button><button className="pay-qr" type="button" disabled={!items.length} onClick={() => beginPayment('qr')}><QrCode size={18} /> Thanh toán QR</button></div>
         <p className="qr-hint">QR được tạo qua webhook khi thiết bị online.</p>
       </aside>
 
-      {payment && <PaymentDialog kind={payment} total={total} offline={offline} onClose={() => setPayment(null)} onPay={pay} />}
+      {payment && <PaymentDialog kind={payment} total={total} offline={offline} initialReceived={paidAmount} onClose={() => setPayment(null)} onPay={pay} />}
       {paymentOptionsOpen && <PaymentOptions onClose={() => setPaymentOptionsOpen(false)} onSelect={(kind) => { setPaymentOptionsOpen(false); beginPayment(kind) }} />}
+      {temporaryOpen && <TemporaryInvoiceDialog orderCode={orderCode} table={table || 'Mang về'} customer={customer} items={items} subtotal={subtotal} discount={discount} total={total} paid={paidInCart} note={note} onClose={() => setTemporaryOpen(false)} />}
+      {newCustomerOpen && <NewCustomerDialog onClose={() => setNewCustomerOpen(false)} onSave={(name, phone) => { setCustomers((current) => [...current, name]); setCustomer(name); const saved = JSON.parse(localStorage.getItem('fnb-management:customers') ?? 'null'); const rows = Array.isArray(saved) ? saved : managementModules.find((module) => module.id === 'customers')?.rows ?? []; localStorage.setItem('fnb-management:customers', JSON.stringify([{ name, phone, segment: 'Khách mới', points: 0, orders: 0, spent: 0 }, ...rows])); setNewCustomerOpen(false) }} />}
       {receipt && <div className="modal-backdrop" role="presentation"><section className="modal-card receipt-card" role="dialog" aria-modal="true"><button className="modal-close" type="button" aria-label="Đóng" onClick={() => setReceipt('')}><X size={18} /></button><span className="receipt-check"><Check size={22} /></span><h2>{offline ? 'Đơn hàng đã lưu offline' : 'Đơn demo đã xử lý'}</h2><p>{offline ? <>Mã đơn <strong>#{receipt}</strong> · Đang chờ đồng bộ cục bộ</> : receipt.startsWith('MOC-') ? <>Mã đơn <strong>#{receipt}</strong></> : receipt}</p><small className="receipt-demo-note">Đang dùng dữ liệu demo; chưa kết nối API backend.</small><button className="button button-primary receipt-done" type="button" onClick={() => setReceipt('')}>Hoàn tất</button></section></div>}
       {ordersOpen && <OrdersDialog onClose={() => setOrdersOpen(false)} />}
     </div>
@@ -161,13 +178,46 @@ function PaymentOptions({ onClose, onSelect }: { onClose: () => void; onSelect: 
 }
 
 function OrdersDialog({ onClose }: { onClose: () => void }) {
-  const [selected, setSelected] = useState<(typeof recentOrders)[number] | null>(null)
+  const orders = useMemo(() => loadInvoiceOrders(), [])
+  const [selected, setSelected] = useState<PosInvoice | null>(null)
   return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><section className="modal-card orders-dialog" role="dialog" aria-modal="true" aria-labelledby="recent-orders-title">
     <button className="modal-close" type="button" aria-label="Đóng" onClick={onClose}><X size={18} /></button><span className="modal-icon"><Clock3 size={19} /></span><h2 id="recent-orders-title">Đơn hàng gần đây</h2><p>Các đơn gần nhất trong dữ liệu demo.</p>
-    <div className="recent-order-list">{recentOrders.map((order) => <button className="recent-order-row" key={order.code} type="button" onClick={() => setSelected(order)}><div><strong>#{order.code}</strong><span>{order.time} · {order.method}</span></div><strong>{formatCurrency(order.amount)}</strong></button>)}</div>
-    {selected && <div className="invoice-detail-panel"><div><strong>Hóa đơn #{selected.code}</strong><button type="button" aria-label="Đóng chi tiết hóa đơn" onClick={() => setSelected(null)}><X size={15} /></button></div><p><span>Thời gian</span><strong>{selected.time}</strong></p><p><span>Phương thức</span><strong>{selected.method}</strong></p><p><span>Khách cần trả</span><strong>{formatCurrency(selected.amount)}</strong></p><p><span>Trạng thái</span><strong>Đã thanh toán</strong></p></div>}
+    <div className="recent-order-list">{orders.map((order) => <button className="recent-order-row" key={order.code} type="button" onClick={() => setSelected(order)}><div><strong>#{order.code}</strong><span>{order.time} · {order.method}</span></div><strong>{formatCurrency(order.amount)}</strong></button>)}</div>
+    {selected && <div className="invoice-detail-panel"><div><strong>Hóa đơn #{selected.code}</strong><button type="button" aria-label="Đóng chi tiết hóa đơn" onClick={() => setSelected(null)}><X size={15} /></button></div><p><span>Thời gian</span><strong>{selected.time}</strong></p><p><span>Phòng/bàn</span><strong>{selected.table}</strong></p><p><span>Khách hàng</span><strong>{selected.customer}</strong></p><div className="invoice-detail-items">{selected.items.map((item, index) => <p key={`${item.name}-${index}`}><span>{item.name} × {item.quantity}</span><strong>{formatCurrency(item.price * item.quantity)}</strong></p>)}</div><p><span>Giảm giá</span><strong>{formatCurrency(selected.discount)}</strong></p><p><span>Phương thức</span><strong>{selected.method}</strong></p><p><span>Khách cần trả</span><strong>{formatCurrency(selected.amount)}</strong></p><p><span>Khách đã trả</span><strong>{formatCurrency(selected.paid)}</strong></p><p><span>Còn nợ</span><strong>{formatCurrency(Math.max(0, selected.amount - selected.paid))}</strong></p><p><span>Trạng thái</span><strong>{selected.status}</strong></p></div>}
     <small className="receipt-demo-note">Chưa có kết nối API lịch sử đơn hàng.</small>
   </section></div>
+}
+
+type PosInvoice = { code: string; time: string; customer: string; table: string; method: string; amount: number; discount: number; paid: number; status: string; items: { name: string; quantity: number; price: number }[] }
+
+function loadInvoiceOrders(): PosInvoice[] {
+  const sample = recentOrders.map((order) => ({ ...order, discount: 0, paid: order.status === 'Đã thanh toán' ? order.amount : 0 }))
+  try {
+    const saved: unknown = JSON.parse(localStorage.getItem('fnb-management:invoices') ?? 'null')
+    if (!Array.isArray(saved)) return sample
+    const invoices = saved.filter((value): value is Record<string, unknown> => typeof value === 'object' && value !== null).map((row): PosInvoice => {
+      let items: PosInvoice['items'] = []
+      try {
+        const parsed: unknown = JSON.parse(String(row.items ?? '[]'))
+        if (Array.isArray(parsed)) items = parsed.filter((entry): entry is Record<string, unknown> => typeof entry === 'object' && entry !== null).map((entry) => ({ name: String(entry.name ?? entry.productName ?? 'Món'), quantity: Number(entry.quantity ?? 1), price: Number(entry.price ?? 0) }))
+      } catch { /* legacy invoices may store their item summary as plain text */ }
+      return { code: String(row.code ?? ''), time: String(row.date ?? ''), customer: String(row.customer ?? 'Khách lẻ'), table: String(row.table ?? 'Mang về'), method: String(row.method ?? 'Tiền mặt'), amount: Number(row.due ?? row.amount ?? 0), discount: Number(row.discount ?? 0), paid: Number(row.paid ?? 0), status: String(row.status ?? 'Chưa thanh toán'), items }
+    }).filter((invoice) => invoice.code)
+    return [...invoices, ...sample.filter((order) => !invoices.some((invoice) => invoice.code === order.code))]
+  } catch { return sample }
+}
+
+function TemporaryInvoiceDialog({ orderCode, table, customer, items, subtotal, discount, total, paid, note, onClose }: { orderCode: string; table: string; customer: string; items: CartLine[]; subtotal: number; discount: number; total: number; paid: number; note: string; onClose: () => void }) {
+  return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><section className="modal-card temporary-invoice-dialog" role="dialog" aria-modal="true" aria-labelledby="temporary-invoice-title"><button className="modal-close" type="button" onClick={onClose} aria-label="Đóng"><X size={18} /></button><span className="modal-icon"><ReceiptText size={18} /></span><h2 id="temporary-invoice-title">Hóa đơn tạm tính</h2><p>{orderCode}: {table} · {customer}</p><div className="temporary-invoice-lines">{items.map(({ product, quantity }) => <div key={product.id}><span>{product.name} × {quantity}</span><strong>{formatCurrency(product.price * quantity)}</strong></div>)}</div>{note && <p className="temporary-invoice-note">Ghi chú: {note}</p>}<div className="temporary-invoice-totals"><p><span>Tổng tiền hàng</span><strong>{formatCurrency(subtotal)}</strong></p>{discount > 0 && <p><span>Giảm giá</span><strong>−{formatCurrency(discount)}</strong></p>}<p><span>Khách cần trả</span><strong>{formatCurrency(total)}</strong></p><p><span>Đã thanh toán</span><strong>{formatCurrency(paid)}</strong></p><p className="temporary-debt"><span>Còn nợ</span><strong>{formatCurrency(Math.max(0, total - paid))}</strong></p></div><button className="button button-primary receipt-done" type="button" onClick={onClose}>Đóng</button></section></div>
+}
+
+function NewCustomerDialog({ onClose, onSave }: { onClose: () => void; onSave: (name: string, phone: string) => void }) {
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const data = new FormData(event.currentTarget)
+    onSave(String(data.get('name') ?? '').trim(), String(data.get('phone') ?? '').trim())
+  }
+  return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><section className="modal-card record-dialog" role="dialog" aria-modal="true" aria-labelledby="new-customer-title"><button className="modal-close" type="button" onClick={onClose} aria-label="Đóng"><X size={18} /></button><h2 id="new-customer-title">Tạo khách hàng mới</h2><p>Khách hàng sẽ được lưu trong dữ liệu demo cục bộ.</p><form onSubmit={submit}><label className="form-label">Tên khách hàng<input name="name" required placeholder="Ví dụ: Anh Nam" /></label><label className="form-label">Số điện thoại<input name="phone" type="tel" placeholder="Nhập số điện thoại" /></label><div className="modal-actions"><button className="button button-secondary" type="button" onClick={onClose}>Hủy</button><button className="button button-primary" type="submit">Lưu khách hàng</button></div></form></section></div>
 }
 
 function ProductCard({ product, onAdd }: { product: Product; onAdd: (product: Product) => void }) {
@@ -192,8 +242,8 @@ function CartItem({ product, quantity, onChange, onRemove }: { product: Product;
   return <div className="cart-item"><ProductArtwork product={product} compact /><div className="cart-item-body"><div className="cart-item-title"><strong>{product.name}</strong><button type="button" aria-label={`Xóa ${product.name}`} onClick={() => onRemove(product.id)}><X size={14} /></button></div><div className="cart-item-bottom"><span>{formatCurrency(product.price)}</span><div className="quantity-control"><button type="button" aria-label="Giảm số lượng" onClick={() => onChange(product.id, quantity - 1)}><Minus size={12} /></button><strong>{quantity}</strong><button type="button" aria-label="Tăng số lượng" onClick={() => onChange(product.id, quantity + 1)}><Plus size={12} /></button></div></div></div></div>
 }
 
-function PaymentDialog({ kind, total, offline, onClose, onPay }: { kind: 'cash' | 'qr'; total: number; offline: boolean; onClose: () => void; onPay: (received: number) => Promise<void> }) {
-  const [received, setReceived] = useState('')
+function PaymentDialog({ kind, total, offline, initialReceived, onClose, onPay }: { kind: 'cash' | 'qr'; total: number; offline: boolean; initialReceived: string; onClose: () => void; onPay: (received: number) => Promise<void> }) {
+  const [received, setReceived] = useState(initialReceived || (kind === 'qr' ? String(total) : ''))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const change = Math.max(0, (Number(received) || 0) - total)
@@ -211,9 +261,9 @@ function PaymentDialog({ kind, total, offline, onClose, onPay }: { kind: 'cash' 
     <button className="modal-close" type="button" onClick={onClose} aria-label="Đóng"><X size={18} /></button>
     <span className="modal-icon">{kind === 'cash' ? <Banknote size={19} /> : <QrCode size={19} />}</span><h2 id="payment-title">{kind === 'cash' ? 'Thanh toán tiền mặt' : 'Thanh toán bằng QR'}</h2><p>Đơn hàng tại Mộc Store · Quận 1</p>
     <div className="payment-amount"><span>Khách cần thanh toán</span><strong>{formatCurrency(total)}</strong></div>
-    {kind === 'cash' ? <><label className="form-label">Tiền khách đưa<input type="number" min="0" value={received} onChange={(event) => setReceived(event.target.value)} placeholder="Nhập số tiền" /></label><div className="change-line"><span>Tiền thừa</span><strong>{formatCurrency(change)}</strong></div></> : <><div className="qr-placeholder"><QrCode size={112} strokeWidth={1.2} /><span>QR thanh toán</span></div><div className="qr-payment-status"><span className={`status-pulse ${offline ? 'paused' : ''}`} />{offline ? 'QR khả dụng khi có kết nối internet' : 'Đang chờ xác nhận thanh toán'}</div></>}
+    {kind === 'cash' ? <><label className="form-label">Khách thanh toán<input type="number" min="0" max={total} value={received} onChange={(event) => setReceived(event.target.value)} placeholder="Nhập số tiền" /></label><div className="change-line"><span>{change > 0 ? 'Tiền thừa' : 'Còn nợ'}</span><strong>{change > 0 ? formatCurrency(change) : formatCurrency(Math.max(0, total - (Number(received) || 0)))}</strong></div></> : <><div className="qr-placeholder"><QrCode size={112} strokeWidth={1.2} /><span>QR thanh toán</span></div><div className="qr-payment-status"><span className={`status-pulse ${offline ? 'paused' : ''}`} />{offline ? 'QR khả dụng khi có kết nối internet' : 'Đang chờ xác nhận thanh toán'}</div></>}
     {offline && kind === 'qr' && <p className="form-error" role="status">Không thể xác nhận thanh toán QR khi thiết bị offline.</p>}
     {error && <p className="form-error" role="alert">{error}</p>}
-    <div className="modal-actions"><button className="button button-secondary" type="button" disabled={busy} onClick={onClose}>Hủy</button><button className="button button-primary" type="button" disabled={busy || (offline && kind === 'qr') || (kind === 'cash' && Number(received) < total)} onClick={confirm}>{busy ? 'Đang xử lý...' : offline ? 'Lưu đơn hàng' : kind === 'cash' ? 'Xác nhận thanh toán' : 'Xác nhận đã nhận tiền'}</button></div>
+    <div className="modal-actions"><button className="button button-secondary" type="button" disabled={busy} onClick={onClose}>Hủy</button><button className="button button-primary" type="button" disabled={busy || (offline && kind === 'qr') || (kind === 'cash' && Number(received) <= 0)} onClick={confirm}>{busy ? 'Đang xử lý...' : offline ? 'Lưu đơn hàng' : kind === 'cash' ? 'Ghi nhận thanh toán' : 'Xác nhận đã nhận tiền'}</button></div>
   </section></div>
 }

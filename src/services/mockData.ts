@@ -16,13 +16,13 @@ export const formatCurrency = (amount: number) => `${new Intl.NumberFormat('vi-V
 export const inventorySummary = { skuCount: 248, lowStockCount: 12, inventoryValue: 86420000 }
 
 export const recentOrders = [
-  { code: 'MOC-0188', time: '11:03', customer: 'Khách lẻ', method: 'QR chuyển khoản', amount: 140000, status: 'Chờ thanh toán' },
-  { code: 'MOC-0186', time: '10:42', customer: 'Khách lẻ', method: 'QR chuyển khoản', amount: 245000, status: 'Đã thanh toán' },
-  { code: 'MOC-0185', time: '10:39', customer: 'Nguyễn Minh', method: 'Tiền mặt', amount: 89000, status: 'Đã thanh toán' },
-  { code: 'MOC-0184', time: '10:32', customer: 'Khách lẻ', method: 'QR chuyển khoản', amount: 132000, status: 'Đã thanh toán' },
-  { code: 'MOC-0183', time: '10:25', customer: 'Khách lẻ', method: 'Tiền mặt', amount: 65000, status: 'Đã thanh toán' },
-  { code: 'MOC-0182', time: '10:18', customer: 'Khách lẻ', method: 'QR chuyển khoản', amount: 210000, status: 'Đã thanh toán' },
-  { code: 'MOC-0181', time: '10:12', customer: 'Khách lẻ', method: 'QR chuyển khoản', amount: 210000, status: 'Đã thanh toán' },
+  { code: 'MOC-0188', time: '11:03', customer: 'Khách lẻ', table: 'Mang về', method: 'QR chuyển khoản', amount: 140000, status: 'Chờ thanh toán', items: [{ name: 'Cà phê sữa', quantity: 2, price: 35000 }, { name: 'Croissant', quantity: 1, price: 70000 }] },
+  { code: 'MOC-0186', time: '10:42', customer: 'Khách lẻ', table: 'Bàn 1', method: 'QR chuyển khoản', amount: 245000, status: 'Đã thanh toán', items: [{ name: 'Trà đào cam sả', quantity: 2, price: 42000 }, { name: 'Bạc xỉu', quantity: 1, price: 45000 }, { name: 'Croissant', quantity: 2, price: 58000 }] },
+  { code: 'MOC-0185', time: '10:39', customer: 'Nguyễn Minh', table: 'Bàn 2', method: 'Tiền mặt', amount: 89000, status: 'Đã thanh toán', items: [{ name: 'Cà phê đen', quantity: 1, price: 39000 }, { name: 'Croissant', quantity: 1, price: 50000 }] },
+  { code: 'MOC-0184', time: '10:32', customer: 'Khách lẻ', table: 'Bàn 3', method: 'QR chuyển khoản', amount: 132000, status: 'Đã thanh toán', items: [{ name: 'Trà sữa', quantity: 2, price: 30000 }, { name: 'Bánh tiramisu', quantity: 1, price: 72000 }] },
+  { code: 'MOC-0183', time: '10:25', customer: 'Khách lẻ', table: 'Mang về', method: 'Tiền mặt', amount: 65000, status: 'Đã thanh toán', items: [{ name: 'Cà phê sữa', quantity: 1, price: 35000 }, { name: 'Bánh tiramisu', quantity: 1, price: 30000 }] },
+  { code: 'MOC-0182', time: '10:18', customer: 'Khách lẻ', table: 'Bàn 2', method: 'QR chuyển khoản', amount: 210000, status: 'Đã thanh toán', items: [{ name: 'Trà đào cam sả', quantity: 3, price: 42000 }, { name: 'Cà phê sữa', quantity: 2, price: 42000 }] },
+  { code: 'MOC-0181', time: '10:12', customer: 'Khách lẻ', table: 'Bàn 1', method: 'QR chuyển khoản', amount: 210000, status: 'Đã thanh toán', items: [{ name: 'Cà phê sữa', quantity: 3, price: 35000 }, { name: 'Croissant', quantity: 3, price: 35000 }] },
 ]
 
 export const hourlyRevenue = [18, 25, 34, 29, 50, 38, 66, 52, 82, 60, 73, 45]

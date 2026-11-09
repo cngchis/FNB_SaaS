@@ -22,8 +22,6 @@ export function Inventory({ stockCheck = false }: InventoryProps) {
   const [selected, setSelected] = useState<Product | null>(null)
   const [quantity, setQuantity] = useState('')
   const [notice, setNotice] = useState('')
-  const [showAll, setShowAll] = useState(false)
-  const stockCheckResults = useMemo(() => catalog.filter((product) => `${product.name} ${product.sku}`.toLocaleLowerCase('vi').includes(search.toLocaleLowerCase('vi'))).filter((product) => !rows.some((row) => row.id === product.id)), [catalog, search, rows])
 
   const filtered = useMemo(() => rows.filter((product) => {
     const matchesSearch = `${product.name} ${product.sku}`.toLocaleLowerCase('vi').includes(search.toLocaleLowerCase('vi'))
@@ -45,13 +43,7 @@ export function Inventory({ stockCheck = false }: InventoryProps) {
 
   const stockUnits = rows.reduce((total, product) => total + product.stock, 0)
 
-  if (stockCheck) return <div className="inventory-page stock-voucher-page">
-    <div className="page-title-row"><div><div className="record-breadcrumb">Hàng hóa <span>/</span> Kiểm kho</div><h1>Tạo phiếu kiểm kho</h1><p>Phiếu mới đang trống. Tìm sản phẩm để thêm vào danh sách kiểm đếm.</p></div><div className="page-actions"><button className="button button-secondary" type="button" onClick={() => window.history.back()}>Hủy</button><button className="button button-primary" type="button" disabled={!rows.length} onClick={() => setNotice('Đã lưu phiếu kiểm kho demo.')}>Lưu phiếu kiểm kho</button></div></div>
-    <section className="panel stock-voucher-meta"><label className="form-label">Mã phiếu<input value={`KK${new Date().toISOString().slice(2, 10).replaceAll('-', '')}-001`} readOnly /></label><label className="form-label">Chi nhánh<select><option>Mộc Store · Quận 1</option><option>Mộc Store · Quận 3</option></select></label><label className="form-label">Ghi chú<input placeholder="Ghi chú phiếu kiểm kho" /></label></section>
-    <section className="panel inventory-list-panel"><div className="inventory-toolbar"><label className="search-field"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm tên hàng hoặc mã hàng..." /></label><div className="filter-actions"><button className="button button-secondary" type="button" onClick={() => setStockFilter((value) => value === 'Tất cả trạng thái' ? 'Sắp hết' : 'Tất cả trạng thái')}><SlidersHorizontal size={15} /> Bộ lọc</button><button className="button button-secondary" type="button" onClick={() => setShowAll((value) => !value)}>{showAll ? 'Ẩn danh sách' : 'Hiển thị tất cả'}</button></div></div>
-      {(search || showAll) && <div className="voucher-search-results">{stockCheckResults.filter((product) => stockFilter !== 'Sắp hết' || product.stock <= product.minimum).map((product) => <button type="button" key={product.id} onClick={() => setRows((current) => [...current, product])}><ProductArtwork product={product} compact /><span><strong>{product.name}</strong><small>{product.sku} · Tồn hệ thống {product.stock}</small></span><Plus size={16} /></button>)}</div>}
-      {rows.length ? <div className="table-scroll"><table className="data-table inventory-table"><thead><tr><th>Sản phẩm</th><th>Tồn hệ thống</th><th>Số lượng thực tế</th><th>Chênh lệch</th><th /></tr></thead><tbody>{rows.map((product) => <tr key={product.id}><td><strong>{product.name}</strong><small>{product.sku}</small></td><td>{product.stock}</td><td><input className="voucher-quantity" type="number" min="0" defaultValue={product.stock} /></td><td>—</td><td><button className="record-delete" type="button" aria-label={`Xóa ${product.name}`} onClick={() => setRows((current) => current.filter((row) => row.id !== product.id))}><X size={15} /></button></td></tr>)}</tbody></table></div> : <div className="empty-state"><ClipboardCheck size={24} /><strong>Phiếu kiểm kho chưa có sản phẩm</strong><span>Nhập từ khóa để tìm hàng hoặc chọn “Hiển thị tất cả”.</span></div>}</section>{notice && <div className="toast" role="status">{notice}</div>}
-  </div>
+  if (stockCheck) return <StockCheckWorkspace catalog={catalog} />
 
   const exportCsv = () => {
     const rowsToExport = [
@@ -110,4 +102,44 @@ export function Inventory({ stockCheck = false }: InventoryProps) {
       </section></div>}
     </div>
   )
+}
+
+type StockCheckLine = { product: Product; counted: number }
+type StockCheckRecord = { code: string; date: string; branch: string; creator: string; note: string; lines: { name: string; sku: string; system: number; counted: number }[] }
+
+function StockCheckWorkspace({ catalog }: { catalog: Product[] }) {
+  const [creating, setCreating] = useState(false)
+  const [search, setSearch] = useState('')
+  const [category, setCategory] = useState('Tất cả nhóm hàng')
+  const [showAll, setShowAll] = useState(false)
+  const [lines, setLines] = useState<StockCheckLine[]>([])
+  const [note, setNote] = useState('')
+  const [branch, setBranch] = useState('Mộc Store · Quận 1')
+  const [history, setHistory] = useState<StockCheckRecord[]>(() => {
+    try { const saved: unknown = JSON.parse(localStorage.getItem('fnb-management:stock-checks') ?? '[]'); return Array.isArray(saved) ? saved as StockCheckRecord[] : [] } catch { return [] }
+  })
+  const [expanded, setExpanded] = useState<string | null>(null)
+  const [notice, setNotice] = useState('')
+  const categories = [...new Set(catalog.map((product) => product.category))]
+  const results = catalog.filter((product) => `${product.name} ${product.sku}`.toLocaleLowerCase('vi').includes(search.toLocaleLowerCase('vi')) && (category === 'Tất cả nhóm hàng' || product.category === category) && !lines.some((line) => line.product.id === product.id))
+  const code = `KK${String(history.length + 1).padStart(6, '0')}`
+  const addLine = (product: Product) => setLines((current) => [...current, { product, counted: product.stock }])
+  const save = () => {
+    if (!lines.length) return
+    const record: StockCheckRecord = { code, date: new Intl.DateTimeFormat('vi-VN').format(new Date()), branch, creator: 'Thu ngân A', note, lines: lines.map(({ product, counted }) => ({ name: product.name, sku: product.sku, system: product.stock, counted })) }
+    const next = [record, ...history]
+    setHistory(next)
+    localStorage.setItem('fnb-management:stock-checks', JSON.stringify(next))
+    setCreating(false); setLines([]); setNote(''); setNotice(`Đã lưu phiếu ${code}.`); window.setTimeout(() => setNotice(''), 2800)
+  }
+  return <div className="inventory-page stock-voucher-page">
+    <div className="page-title-row"><div><div className="record-breadcrumb">Hàng hóa <span>/</span> Kiểm kho</div><h1>Phiếu kiểm kho</h1><p>Theo dõi số lượng thực tế theo từng phiếu kiểm kho.</p></div><button className="button button-primary" type="button" onClick={() => { setLines([]); setSearch(''); setCreating(true) }}><Plus size={16} /> Phiếu kiểm kho mới</button></div>
+    {!creating ? <section className="panel record-table-panel"><div className="table-scroll"><table className="data-table record-table"><thead><tr><th>Mã phiếu</th><th>Ngày kiểm</th><th>Chi nhánh</th><th>Số mặt hàng</th><th>Người tạo</th><th>Ghi chú</th></tr></thead><tbody>{history.map((record) => <><tr key={record.code} className="record-expandable-row" onClick={() => setExpanded((current) => current === record.code ? null : record.code)}><td>{record.code}</td><td>{record.date}</td><td>{record.branch}</td><td>{record.lines.length}</td><td>{record.creator}</td><td>{record.note || '—'}</td></tr>{expanded === record.code && <tr key={`${record.code}-detail`} className="record-detail-row"><td colSpan={6}><div className="record-detail-content">{record.lines.map((line) => <span key={line.sku}>{line.name} · Tồn hệ thống {line.system} / Thực tế {line.counted}</span>)}</div></td></tr>}</>)}</tbody></table></div>{!history.length && <div className="empty-state"><ClipboardCheck size={24} /><strong>Chưa có phiếu kiểm kho</strong><span>Tạo phiếu mới để ghi nhận số lượng thực tế.</span></div>}</section> : <>
+      <section className="panel stock-voucher-meta"><label className="form-label">Mã phiếu<input value={code} readOnly /></label><label className="form-label">Ngày kiểm<input value={new Intl.DateTimeFormat('vi-VN').format(new Date())} readOnly /></label><label className="form-label">Chi nhánh<select value={branch} onChange={(event) => setBranch(event.target.value)}><option>Mộc Store · Quận 1</option><option>Mộc Store · Quận 3</option></select></label><label className="form-label">Người tạo<input value="Thu ngân A" readOnly /></label><label className="form-label">Ghi chú<input value={note} onChange={(event) => setNote(event.target.value)} placeholder="Ghi chú phiếu kiểm kho" /></label></section>
+      <section className="panel inventory-list-panel"><div className="inventory-toolbar"><label className="search-field"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm tên hàng hoặc mã hàng..." /></label><div className="filter-actions"><label className="select-field"><select value={category} onChange={(event) => setCategory(event.target.value)}><option>Tất cả nhóm hàng</option>{categories.map((item) => <option key={item}>{item}</option>)}</select><ChevronDown size={14} /></label><button className="button button-secondary" type="button" onClick={() => setShowAll((value) => !value)}>{showAll ? 'Ẩn kết quả' : 'Hiển thị tất cả'}</button></div></div>
+        {(search || showAll) && <div className="voucher-search-results">{results.map((product) => <button type="button" key={product.id} onClick={() => addLine(product)}><ProductArtwork product={product} compact /><span><strong>{product.name}</strong><small>{product.sku} · Tồn hệ thống {product.stock}</small></span><Plus size={16} /></button>)}</div>}
+        {lines.length ? <div className="table-scroll"><table className="data-table inventory-table"><thead><tr><th>Sản phẩm</th><th>Tồn hệ thống</th><th>Số lượng thực tế</th><th>Chênh lệch</th><th /></tr></thead><tbody>{lines.map(({ product, counted }) => <tr key={product.id}><td><strong>{product.name}</strong><small>{product.sku}</small></td><td>{product.stock}</td><td><input className="voucher-quantity" type="number" min="0" value={counted} onChange={(event) => setLines((current) => current.map((line) => line.product.id === product.id ? { ...line, counted: Number(event.target.value) } : line))} /></td><td>{counted - product.stock > 0 ? '+' : ''}{counted - product.stock}</td><td><button className="record-delete" type="button" aria-label={`Xóa ${product.name}`} onClick={() => setLines((current) => current.filter((line) => line.product.id !== product.id))}><X size={15} /></button></td></tr>)}</tbody></table></div> : <div className="empty-state"><ClipboardCheck size={24} /><strong>Phiếu kiểm kho chưa có sản phẩm</strong><span>Tìm hàng hoặc chọn “Hiển thị tất cả” để thêm sản phẩm.</span></div>}</section>
+      <div className="stock-voucher-actions"><button className="button button-secondary" type="button" onClick={() => setCreating(false)}>Hủy</button><button className="button button-primary" type="button" disabled={!lines.length} onClick={save}>Lưu phiếu kiểm kho</button></div>
+    </>}{notice && <div className="toast" role="status">{notice}</div>}
+  </div>
 }
