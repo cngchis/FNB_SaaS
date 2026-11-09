@@ -25,17 +25,21 @@ Báo cáo chi tiết về phần đã triển khai có tại [backend-foundation
 
 ## Trạng thái xác minh
 
-Go 1.27.3 đã được nhận diện. `gofmt`, `go test ./...` và `go build ./...` đã chạy thành công sau khi tải dependency; test RLS bị skip vì chưa có test database URL. SQLC v1.29.0 đã sinh code và các query tra tenant, đăng nhập, store thành viên đã dùng code sinh. PostgreSQL local đang lắng nghe tại `localhost:5432`, nhưng môi trường agent chưa có thông tin đăng nhập dùng được (`cngchis` không phải role DB; đăng nhập peer bằng `postgres` bị từ chối). Theo yêu cầu người dùng, không cần dùng Docker cho quy trình này; Compose chỉ là tùy chọn.
+**Cập nhật từ người dùng:** Migration trên database mới `fnb_saas`, bootstrap owner, kết nối API, đăng nhập và kết quả PASS của test RLS đã được người dùng xác nhận thành công. Test RLS kiểm tra đọc/ghi của cả hai tenant và không coi lỗi kết nối là bằng chứng chặn ghi chéo tenant.
+
+Go 1.27.3 đã được nhận diện. `gofmt`, `go test ./...` và `go build ./...` đã được agent chạy thành công trước đó; các integration test cần credentials sẽ skip trong môi trường agent. SQLC v1.29.0 đã sinh code và các query tra tenant, đăng nhập, store thành viên đã dùng code sinh. Người dùng chạy PostgreSQL local và tự nhập credentials trong terminal; không lưu mật khẩu trong tài liệu/Git. Không cần Docker cho quy trình này; Compose chỉ là tùy chọn.
+
+Test vòng đời authentication mới nằm tại [apps/api/tests/auth_integration_test.go](../apps/api/tests/auth_integration_test.go). Chờ chạy live với API đang bật và các biến `AUTH_TEST_TENANT`, `AUTH_TEST_EMAIL`, `AUTH_TEST_PASSWORD`; mặc định dùng `http://localhost:8080`.
 
 ## Việc agent tiếp theo cần làm
 
 ### P0 — Xác minh và sửa nền tảng hiện có
 
 1. Kiểm tra `git status` trước khi sửa để phân biệt thay đổi đã có và thay đổi của mình. Không commit hoặc push tự động.
-2. Kết nối PostgreSQL qua thông tin trong pgAdmin; tạo/chọn database và role `fnb_app` trước khi chạy migration. Các hướng dẫn local đã được thêm vào README.
-3. Export `DATABASE_URL`, `MIGRATIONS_DATABASE_URL`, `JWT_SECRET`, `WEB_ORIGIN` và biến `BOOTSTRAP_*`; chạy `make migrate-up-local`, `make bootstrap-local`, rồi kiểm tra API bằng `make api-run`.
-4. Chạy migration up/down trên database dev/test; xác nhận composite foreign keys, RLS policy, grants và bootstrap.
-5. Cấu hình `TEST_DATABASE_ADMIN_URL` và `TEST_DATABASE_URL`, sau đó chạy lại `go test ./...` để thực thi thay vì skip test tenant isolation.
+2. Chạy test authentication lifecycle trên API đang chạy; kiểm tra refresh rotation, từ chối refresh token cũ và vô hiệu hóa token sau logout.
+3. Không bootstrap lại tenant hiện có; migration, owner và RLS đã được người dùng xác nhận. Khi cần chạy lại backend, dùng cấu hình local theo README.
+4. Kiểm tra rollback migration trên một database thử nghiệm riêng; chưa có xác nhận rollback live. Không rollback database chứa dữ liệu đang dùng.
+5. Khi thay đổi schema/RLS, cấu hình lại biến test DB và chạy tenant isolation test bằng runtime role `fnb_app`.
 6. Rà soát SQLC query generation và mở rộng việc dùng query code sinh cho session/refresh và các repository nghiệp vụ.
 7. Rà soát các phát hiện trong API/schema; cập nhật tài liệu phản ánh kết quả thực sự.
 
@@ -43,7 +47,7 @@ Go 1.27.3 đã được nhận diện. `gofmt`, `go test ./...` và `go build ./
 
 1. Tiếp tục dùng code sinh từ SQLC trong repository/query layer; hiện các truy vấn session/refresh còn dùng pgx trực tiếp.
 2. Đưa truy vấn tenant-owned qua transaction có `SET LOCAL app.tenant_id`; tránh query trực tiếp từ pool cho bảng tenant-owned.
-3. Thêm test cho login/refresh/logout, authorization role, xử lý money bằng integer VND và tenant isolation nếu toolchain chạy được.
+3. Chạy test login/refresh/logout vừa thêm; mở rộng test phân quyền bằng nhiều role khi có fixtures phù hợp. Money/idempotency tests sẽ đi cùng nghiệp vụ tương ứng.
 
 ### P2 — Tiếp tục nghiệp vụ theo phạm vi được duyệt
 

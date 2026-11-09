@@ -59,12 +59,13 @@ Use distinct owner/runtime database passwords and URL-encode reserved characters
 | Go formatting | Passed: `gofmt` run on Go sources |
 | Go tests | Passed: `go test ./...`; PostgreSQL RLS integration test skipped because test database URLs are not configured |
 | Go build | Passed: `go build ./...` |
-| PostgreSQL migration / RLS integration test | Pending: local server accepts connections, but no usable database credentials were available in the agent environment |
+| PostgreSQL migration / RLS integration test | User confirmed migration, bootstrap, readiness, login, and a PASS result for the RLS test on local database `fnb_saas`; credentials are not available to the agent |
+| Full authentication lifecycle | Integration test added; live execution still requires account credentials and the running API |
 | SQLC generation | Passed: generated with SQLC v1.29.0; initial auth lookups use generated query methods |
 | Compose validation/startup | Not run: Docker was not used; native local PostgreSQL is the requested workflow |
 | Frontend visual checks | Not applicable to this backend-only change; no frontend/CSS files were edited |
 
-The API has compiled and its Go test suite passes. The database migration and cross-tenant integration check still need to be run with the credentials configured in pgAdmin before relying on the schema in deployment.
+The API has compiled. Local migration, bootstrap, basic login, and cross-tenant isolation have been confirmed by the user. The complete authentication lifecycle test still needs a live run; this report distinguishes user-confirmed results from agent-executed checks.
 
 ## Out of scope / follow-up
 
@@ -72,4 +73,4 @@ The API has compiled and its Go test suite passes. The database migration and cr
 - Product/customer repository endpoints and frontend API wiring.
 - Granular permission enforcement, membership management, and multi-store switching within an active session.
 - Extending SQLC-generated query usage to session and business module repositories.
-- CI execution and live PostgreSQL RLS verification.
+- CI execution and the full authentication lifecycle integration run.

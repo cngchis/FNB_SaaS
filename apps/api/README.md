@@ -20,6 +20,12 @@ Requirements for native local development: Go 1.22+, PostgreSQL 16, and goose CL
 
 `make api-build` and `make api-test` work without Docker. `make migrate-down-local` rolls back the latest migration. The `*-local` targets use environment variables already exported in the shell. Docker Compose targets remain available as an optional isolated setup. The RLS integration test is skipped unless both `TEST_DATABASE_ADMIN_URL` and `TEST_DATABASE_URL` point to a migrated test database using an admin role and `fnb_app` respectively.
 
+The RLS test also accepts `TEST_DATABASE_ADMIN_PASSWORD` and `TEST_DATABASE_PASSWORD` as separate password overrides, so connection strings do not need to contain passwords. It creates two temporary tenants and removes their data after the test. It requires a migrated development or test database and an admin account that can bypass RLS to prepare fixtures.
+
+### Authentication integration check
+
+Keep the API running, then set `AUTH_TEST_TENANT`, `AUTH_TEST_EMAIL`, and `AUTH_TEST_PASSWORD` for a provisioned account. Run `go test -v ./tests -run '^TestAuthLifecycle$' -count=1` from `apps/api`. Optionally set `AUTH_TEST_BASE_URL` (default `http://localhost:8080`). The test checks login, identity context, the role gate, refresh-token rotation, rejection of the old refresh token, logout, and rejection of tokens after logout. It revokes its own session and does not print credentials or tokens. Without credentials it skips rather than verifying a live API.
+
 ## API foundation
 
 All JSON responses use `{ "data": ... }`; errors use `{ "error": { "code": "...", "message": "..." } }`. A request ID is returned in `X-Request-ID` and included in structured logs.

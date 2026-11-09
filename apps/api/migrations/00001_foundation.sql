@@ -264,6 +264,7 @@ CREATE TABLE payments (
 );
 CREATE INDEX payments_order_created_idx ON payments (tenant_id, store_id, order_id, created_at DESC);
 
+-- +goose StatementBegin
 DO $$
 DECLARE table_name text;
 BEGIN
@@ -280,6 +281,7 @@ BEGIN
         );
     END LOOP;
 END $$;
+-- +goose StatementEnd
 
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE users FORCE ROW LEVEL SECURITY;
@@ -291,6 +293,7 @@ CREATE POLICY user_membership_isolation ON users
           AND membership.deleted_at IS NULL
     ));
 
+-- +goose StatementBegin
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'fnb_app') THEN
@@ -301,6 +304,7 @@ BEGIN
             payment_methods, payments TO fnb_app;
     END IF;
 END $$;
+-- +goose StatementEnd
 
 -- +goose Down
 DROP TABLE IF EXISTS payments;
