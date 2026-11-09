@@ -28,7 +28,7 @@ function ProductMetricChart({ title, metric, onMetricChange, options }: { title:
   const maxValue = Math.max(...values, 1)
   return <section className="report-product-chart">
     <div className="report-product-chart-header"><h3>{title}</h3><select aria-label={`Lọc ${title.toLocaleLowerCase('vi')}`} value={metric} onChange={(event) => onMetricChange(event.target.value as GoodsMetric)}>{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div>
-    <div className="report-product-bars">{goodsMetrics.map((item) => <div className="report-product-bar" key={item.name} title={`${item.name}: ${metric === 'stockQuantity' || metric === 'quantity' ? item[metric] : formatCurrency(item[metric])}`}><div><i style={{ height: `${Math.max(5, item[metric] / maxValue * 100)}%` }} /></div><strong>{metric === 'stockQuantity' || metric === 'quantity' ? item[metric] : formatCurrency(item[metric])}</strong><span>{item.name}</span></div>)}</div>
+    <div className="report-product-bars">{goodsMetrics.map((item) => <div className="report-product-bar" key={item.name} title={`${item.name}: ${metric === 'stockQuantity' || metric === 'quantity' ? item[metric] : formatCurrency(item[metric])}`}><div><i style={{ width: `${Math.max(5, item[metric] / maxValue * 100)}%` }} /></div><strong>{metric === 'stockQuantity' || metric === 'quantity' ? item[metric] : formatCurrency(item[metric])}</strong><span>{item.name}</span></div>)}</div>
   </section>
 }
 

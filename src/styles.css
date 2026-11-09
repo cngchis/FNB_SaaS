@@ -623,12 +623,12 @@ kbd { flex: 0 0 auto; padding: 2px 4px; color: #8e8e93; border: 1px solid #e5e5e
 .report-product-chart-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
 .report-product-chart-header h3 { margin: 0; color: var(--carbon); font-size: 10px; font-weight: 600; }
 .report-product-chart-header select { max-width: 150px; height: 27px; padding: 0 7px; color: #536159; border: 1px solid #e5e5ea; border-radius: 6px; background: #fff; font-size: 8px; }
-.report-product-bars { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; height: 94px; }
-.report-product-bar { display: grid; min-width: 0; grid-template-rows: minmax(0, 1fr) auto auto; justify-items: center; gap: 4px; text-align: center; }
-.report-product-bar > div { display: flex; width: 100%; height: 100%; align-items: flex-end; justify-content: center; }
-.report-product-bar i { display: block; width: min(25px, 70%); min-height: 5px; border-radius: 4px 4px 0 0; background: var(--chart-green); }
-.report-product-bar strong { overflow: hidden; max-width: 100%; color: var(--carbon); font-size: 7px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
-.report-product-bar > span { overflow: hidden; max-width: 100%; color: var(--muted); font-size: 7px; text-overflow: ellipsis; white-space: nowrap; }
+.report-product-bars { display: grid; gap: 7px; }
+.report-product-bar { display: grid; min-width: 0; grid-template-columns: minmax(74px, 100px) minmax(0, 1fr) auto; grid-template-areas: "name bar value"; gap: 10px; align-items: center; }
+.report-product-bar > div { grid-area: bar; display: flex; width: 100%; height: 9px; align-items: center; overflow: hidden; border-radius: 5px; background: #eef1f4; }
+.report-product-bar i { display: block; height: 100%; min-width: 5px; border-radius: inherit; background: var(--chart-green); }
+.report-product-bar strong { grid-area: value; overflow: hidden; max-width: 110px; color: var(--carbon); font-size: 8px; font-weight: 600; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
+.report-product-bar > span { grid-area: name; overflow: hidden; max-width: 100%; color: var(--muted); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
 .report-total { display: flex; flex-direction: column; gap: 5px; margin: 21px 0 17px; padding: 13px; border-radius: 8px; background: #f1f5f8; }
 .report-total strong { color: #30343b; font-size: 18px; }
 .report-total span { color: #8e8e93; font-size: 9px; }
@@ -722,8 +722,9 @@ kbd { flex: 0 0 auto; padding: 2px 4px; color: #8e8e93; border: 1px solid #e5e5e
   .report-bar span { font-size: 6px; }
   .report-line-legend { gap: 5px; font-size: 7px; }
   .goods-charts-stack { gap: 14px; margin-top: 12px; }
-  .report-product-bars { gap: 5px; height: 82px; }
-  .report-product-bar strong, .report-product-bar > span { font-size: 6px; }
+  .report-product-bars { gap: 7px; }
+  .report-product-bar { grid-template-columns: minmax(65px, 82px) minmax(0, 1fr) auto; gap: 6px; }
+  .report-product-bar strong, .report-product-bar > span { font-size: 7px; }
   .report-product-chart-header select { max-width: 128px; font-size: 7px; }
   .report-breakdown { display: none; }
   .report-shift-banner { gap: 8px; padding: 9px; }
