@@ -4,14 +4,21 @@ Go API foundation for the existing FNB SaaS frontend. The API is a modular monol
 
 ## Local development
 
-Requirements: Docker Compose v2, Go 1.22+, and `sqlc` v2 for query generation.
+Requirements for native local development: Go 1.22+, PostgreSQL 16, and goose CLI. Docker Compose is optional. `make sqlc` runs the pinned SQLC v1.29.0 CLI through Go.
 
-1. From the repository root, copy `deploy/.env.example` to `deploy/.env` and replace every placeholder with local values. Use distinct passwords for the database owner and runtime role. URL-encode reserved characters in database URL passwords.
-2. Run `make up` to start PostgreSQL 16, apply goose migrations, build the API image, and start the API.
-3. Run `make bootstrap` once to create the first tenant/store/owner and default payment methods. Bootstrap uses the owner connection and bcrypt-hashes the supplied password.
-4. The API is available at `http://localhost:8080`. `GET /healthz`, `GET /readyz`, and `GET /metrics` are exposed outside the versioned API.
+1. In pgAdmin, create or select a local database (default name: `fnb_saas`) and create the runtime role before applying migrations. Use a strong local password in place of the placeholder:
 
-`make down` stops services while preserving the named database volume. `make migrate-up` and `make migrate-down` apply or roll back the latest migration. `make api-test` runs Go tests. The RLS integration test is skipped unless both `TEST_DATABASE_ADMIN_URL` and `TEST_DATABASE_URL` point to a migrated test database using the owner and `fnb_app` roles respectively.
+   ```sql
+   CREATE ROLE fnb_app LOGIN PASSWORD 'replace-with-a-local-secret' NOSUPERUSER NOBYPASSRLS;
+   ```
+
+   If the role already exists, update it with `ALTER ROLE fnb_app WITH LOGIN PASSWORD 'replace-with-a-local-secret' NOSUPERUSER NOBYPASSRLS;`. The migration connection should use a database administrator that can create tables and grant privileges.
+2. Export `MIGRATIONS_DATABASE_URL` with the admin connection string and `DATABASE_URL` with the `fnb_app` connection string. Also export `JWT_SECRET` (at least 32 bytes), `WEB_ORIGIN` (usually `http://localhost:5173`), and bootstrap variables for the initial owner. URL-encode reserved characters in database URL passwords. Use `localhost` as the host for a native API process.
+3. Install the matching goose CLI with `go install github.com/pressly/goose/v3/cmd/goose@v3.24.1`, then run `make migrate-up-local` to apply migrations using your local PostgreSQL.
+4. Run `make bootstrap-local` once to create the first tenant/store/owner and default payment methods. Bootstrap uses the admin connection and bcrypt-hashes the supplied password.
+5. Run `make api-run`. The API is available at `http://localhost:8080`; `GET /healthz`, `GET /readyz`, and `GET /metrics` are exposed outside the versioned API.
+
+`make api-build` and `make api-test` work without Docker. `make migrate-down-local` rolls back the latest migration. The `*-local` targets use environment variables already exported in the shell. Docker Compose targets remain available as an optional isolated setup. The RLS integration test is skipped unless both `TEST_DATABASE_ADMIN_URL` and `TEST_DATABASE_URL` point to a migrated test database using an admin role and `fnb_app` respectively.
 
 ## API foundation
 
@@ -29,10 +36,10 @@ Passwords are bcrypt-hashed. Refresh tokens are random opaque values; only their
 
 `migrations/00001_foundation.sql` creates tenants, stores, global user identities, tenant memberships/store grants, role/permission definitions, sessions, catalog, customers, orders with normalized order items, payment methods, and payments. Tenant/store relationships use composite foreign keys. Tenant-owned tables use forced PostgreSQL RLS policies based on transaction-local `app.tenant_id`. Global identity lookup is limited to tenant members by its RLS policy.
 
-SQL query sources are in `sql/`; run `make sqlc` after changing them or the schema. Generated `internal/dbgen` is build output and is intentionally not checked in yet; the current foundation uses pgx directly while query generation is staged for module repositories.
+SQL query sources are in `sql/`; run `make sqlc` after changing them or the schema. Generated typed queries are checked in under `internal/dbgen` and are used for tenant lookup, login identity, and membership-store queries. Session and refresh flows still use pgx directly within tenant-scoped transactions.
 
 ## Current scope and known limitations
 
 - Order/payment tables are schema foundations only; order creation, payment providers, idempotent checkout, and POS flows are not implemented in this phase.
 - Authentication supports one selected store per session. Authorization is currently role-based at the route middleware level; granular permission enforcement and membership administration are future work.
-- PostgreSQL migration, API build, Compose startup, and integration tests must be run in an environment with Go and Docker installed.
+- API build and Go tests pass. PostgreSQL migration and RLS integration still require database credentials configured in pgAdmin. SQLC generation has been run and integrated for the initial auth lookups.

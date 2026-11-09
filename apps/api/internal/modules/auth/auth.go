@@ -18,16 +18,16 @@ import (
 
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/config"
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/database"
-	"github.com/cngchis/FNB_SaaS/apps/api/internal/middleware"
+	"github.com/cngchis/FNB_SaaS/apps/api/internal/dbgen"
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/shared/httpx"
 )
 
 type Claims struct {
-	TenantID    string `json:"tenant_id"`
-	StoreID     string `json:"store_id"`
+	TenantID     string `json:"tenant_id"`
+	StoreID      string `json:"store_id"`
 	MembershipID string `json:"membership_id"`
-	Role        string `json:"role"`
-	SessionID   string `json:"sid"`
+	Role         string `json:"role"`
+	SessionID    string `json:"sid"`
 	jwt.RegisteredClaims
 }
 
@@ -60,7 +60,7 @@ type loginRequest struct {
 }
 
 type refreshRequest struct {
-	TenantSlug  string `json:"tenant_slug" binding:"required,min=3,max=64"`
+	TenantSlug   string `json:"tenant_slug" binding:"required,min=3,max=64"`
 	RefreshToken string `json:"refresh_token" binding:"required,min=32,max=256"`
 }
 
@@ -91,35 +91,24 @@ func (h *Handler) login(c *gin.Context) {
 	var user userRow
 	var stores []storeRow
 	err = database.WithTenantTx(c.Request.Context(), h.pool, tenantID, func(tx pgx.Tx) error {
-		if err := tx.QueryRow(c.Request.Context(), `
-			SELECT u.id::text, u.email, u.display_name, u.password_hash,
-			       m.id::text, r.slug, r.name
-			FROM users u
-			JOIN memberships m ON m.user_id = u.id AND m.tenant_id = $1
-			JOIN roles r ON r.slug = m.role_slug
-			WHERE lower(u.email) = lower($2) AND u.deleted_at IS NULL
-			  AND m.status = 'active' AND m.deleted_at IS NULL`, tenantID, request.Email).
-			Scan(&user.UserID, &user.Email, &user.DisplayName, &user.PasswordHash, &user.MembershipID, &user.RoleSlug, &user.RoleName); err != nil {
-			return err
-		}
-		rows, err := tx.Query(c.Request.Context(), `
-			SELECT s.id::text, s.name, s.slug
-			FROM membership_stores ms
-			JOIN stores s ON s.id = ms.store_id AND s.tenant_id = ms.tenant_id
-			WHERE ms.tenant_id = $1 AND ms.membership_id = $2 AND s.deleted_at IS NULL
-			ORDER BY s.name`, tenantID, user.MembershipID)
+		queries := dbgen.New(tx)
+		identity, err := queries.GetLoginIdentity(c.Request.Context(), dbgen.GetLoginIdentityParams{TenantID: tenantID, Email: request.Email})
 		if err != nil {
 			return err
 		}
-		defer rows.Close()
-		for rows.Next() {
-			var store storeRow
-			if err := rows.Scan(&store.ID, &store.Name, &store.Slug); err != nil {
-				return err
-			}
-			stores = append(stores, store)
+		user = userRow{
+			UserID: identity.UserID, Email: identity.Email, DisplayName: identity.DisplayName,
+			PasswordHash: identity.PasswordHash, MembershipID: identity.MembershipID,
+			RoleSlug: identity.MembershipRole, RoleName: identity.RoleName,
 		}
-		return rows.Err()
+		storeRows, err := queries.ListMembershipStores(c.Request.Context(), dbgen.ListMembershipStoresParams{TenantID: tenantID, MembershipID: user.MembershipID})
+		if err != nil {
+			return err
+		}
+		for _, store := range storeRows {
+			stores = append(stores, storeRow{ID: store.ID, Name: store.Name, Slug: store.Slug})
+		}
+		return nil
 	})
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		httpx.Fail(c, http.StatusInternalServerError, "authentication_unavailable", "Unable to verify this account right now.")
@@ -241,14 +230,14 @@ func (h *Handler) writeTokenResponse(c *gin.Context, identity Identity, refreshT
 		return
 	}
 	httpx.Success(c, http.StatusOK, gin.H{
-		"access_token": accessToken,
+		"access_token":  accessToken,
 		"refresh_token": refreshToken,
-		"token_type": "Bearer",
-		"expires_at": expiresAt,
-		"user": gin.H{"id": identity.UserID, "email": email, "display_name": displayName, "role": identity.Role},
-		"tenant_id": identity.TenantID,
-		"store_id": identity.StoreID,
-		"stores": stores,
+		"token_type":    "Bearer",
+		"expires_at":    expiresAt,
+		"user":          gin.H{"id": identity.UserID, "email": email, "display_name": displayName, "role": identity.Role},
+		"tenant_id":     identity.TenantID,
+		"store_id":      identity.StoreID,
+		"stores":        stores,
 	})
 }
 
@@ -349,9 +338,8 @@ func CurrentIdentity(c *gin.Context) (Identity, bool) {
 }
 
 func tenantIDForSlug(ctx context.Context, pool *pgxpool.Pool, slug string) (string, error) {
-	var tenantID string
-	err := pool.QueryRow(ctx, `SELECT id::text FROM tenants WHERE slug = lower($1) AND deleted_at IS NULL`, strings.TrimSpace(slug)).Scan(&tenantID)
-	return tenantID, err
+	tenant, err := dbgen.New(pool).GetTenantBySlug(ctx, strings.TrimSpace(slug))
+	return tenant.ID, err
 }
 
 func chooseStore(stores []storeRow, requested string) (string, bool) {
@@ -381,4 +369,3 @@ func hashToken(token string) []byte {
 	digest := sha256.Sum256([]byte(token))
 	return digest[:]
 }
-

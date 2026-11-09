@@ -25,24 +25,23 @@ Báo cáo chi tiết về phần đã triển khai có tại [backend-foundation
 
 ## Trạng thái xác minh
 
-Các lệnh build, Go tests, SQLC, Compose và PostgreSQL integration test **chưa chạy được** trong môi trường làm việc trước đó do thiếu `go`, `gofmt`, `sqlc`, Docker và Docker Compose. Không coi migration hoặc backend đã chạy thành công trước khi xác minh lại bằng toolchain thực tế.
+Go 1.27.3 đã được nhận diện. `gofmt`, `go test ./...` và `go build ./...` đã chạy thành công sau khi tải dependency; test RLS bị skip vì chưa có test database URL. SQLC v1.29.0 đã sinh code và các query tra tenant, đăng nhập, store thành viên đã dùng code sinh. PostgreSQL local đang lắng nghe tại `localhost:5432`, nhưng môi trường agent chưa có thông tin đăng nhập dùng được (`cngchis` không phải role DB; đăng nhập peer bằng `postgres` bị từ chối). Theo yêu cầu người dùng, không cần dùng Docker cho quy trình này; Compose chỉ là tùy chọn.
 
 ## Việc agent tiếp theo cần làm
 
 ### P0 — Xác minh và sửa nền tảng hiện có
 
 1. Kiểm tra `git status` trước khi sửa để phân biệt thay đổi đã có và thay đổi của mình. Không commit hoặc push tự động.
-2. Cài/chuẩn bị Go 1.22+, Docker Compose v2 và sqlc nếu môi trường cho phép; không thay đổi framework hoặc kiến trúc.
-3. Chạy `gofmt` trên toàn bộ Go source, sau đó `go test ./...` và `go build ./...` trong `apps/api`.
-4. Tạo `deploy/.env` từ template, điền secret local an toàn, chạy `docker compose config` và kiểm tra stack khởi động.
-5. Kiểm tra migration up/down trên database dùng riêng cho dev/test; xác nhận cú pháp composite foreign keys, RLS policy, grant và bootstrap.
-6. Chạy test tenant isolation bằng cả admin URL và runtime URL. Xác nhận runtime role không thể đọc hoặc ghi tenant khác.
-7. Chạy SQLC generation. Sửa schema/query/config nếu generator không chấp nhận migration hiện tại. Xác định cách sinh và quản lý `go.sum`.
-8. Rà soát lỗi phát hiện được trong Compose, API hoặc schema; cập nhật tài liệu và trạng thái xác minh sau khi đã chạy thật.
+2. Kết nối PostgreSQL qua thông tin trong pgAdmin; tạo/chọn database và role `fnb_app` trước khi chạy migration. Các hướng dẫn local đã được thêm vào README.
+3. Export `DATABASE_URL`, `MIGRATIONS_DATABASE_URL`, `JWT_SECRET`, `WEB_ORIGIN` và biến `BOOTSTRAP_*`; chạy `make migrate-up-local`, `make bootstrap-local`, rồi kiểm tra API bằng `make api-run`.
+4. Chạy migration up/down trên database dev/test; xác nhận composite foreign keys, RLS policy, grants và bootstrap.
+5. Cấu hình `TEST_DATABASE_ADMIN_URL` và `TEST_DATABASE_URL`, sau đó chạy lại `go test ./...` để thực thi thay vì skip test tenant isolation.
+6. Rà soát SQLC query generation và mở rộng việc dùng query code sinh cho session/refresh và các repository nghiệp vụ.
+7. Rà soát các phát hiện trong API/schema; cập nhật tài liệu phản ánh kết quả thực sự.
 
 ### P1 — Hoàn thiện SQLC và data access
 
-1. Dùng code sinh từ SQLC trong repository/query layer thay vì để SQLC chỉ ở dạng cấu hình và query source.
+1. Tiếp tục dùng code sinh từ SQLC trong repository/query layer; hiện các truy vấn session/refresh còn dùng pgx trực tiếp.
 2. Đưa truy vấn tenant-owned qua transaction có `SET LOCAL app.tenant_id`; tránh query trực tiếp từ pool cho bảng tenant-owned.
 3. Thêm test cho login/refresh/logout, authorization role, xử lý money bằng integer VND và tenant isolation nếu toolchain chạy được.
 
@@ -68,8 +67,8 @@ Các lệnh build, Go tests, SQLC, Compose và PostgreSQL integration test **ch�
 ## Tiêu chí hoàn tất cho giai đoạn này
 
 - `gofmt`, `go test ./...`, `go build ./...` đều chạy thành công.
-- SQLC generation thành công và code sinh được tích hợp hoặc có quyết định rõ ràng được ghi lại.
-- Docker Compose config hợp lệ; PostgreSQL, migration, bootstrap và API chạy được theo hướng dẫn.
+- SQLC generation thành công và các truy vấn thuộc module được chuyển dần sang code sinh.
+- PostgreSQL local, migration, bootstrap và API chạy được theo hướng dẫn; không yêu cầu Docker.
 - Tenant isolation integration test chứng minh tenant A không thể đọc/ghi tenant B.
 - Không thay đổi UI/CSS và không đưa secret vào Git.
 - Báo cáo build/test phản ánh đúng những gì đã chạy; chưa commit/push nếu người dùng chưa yêu cầu.
