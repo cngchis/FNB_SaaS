@@ -13,7 +13,7 @@
   --accent-blue-soft: #e5f1ff;
   --success: #00c853;
   --success-soft: #e8f9ef;
-  --chart-green: #00c853;
+  --chart-green: var(--accent-blue);
   --chart-red: #e53935;
   --chart-yellow: #ffca28;
   --chart-white: #ffffff;
