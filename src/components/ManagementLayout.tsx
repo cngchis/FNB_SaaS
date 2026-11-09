@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { ArrowLeftRight, BarChart3, Bell, Boxes, ChevronDown, CreditCard, LayoutDashboard, Menu, MoreHorizontal, ShoppingBag, Users, Wallet, X, UserRoundCog, type LucideIcon } from 'lucide-react'
+import { ArrowLeftRight, BarChart3, Bell, Boxes, ChevronDown, CreditCard, LayoutDashboard, Menu, MoreHorizontal, ShoppingBag, Users, Wallet, UserRoundCog, CircleUserRound, ChevronRight, Utensils, Tags, NotebookText, Armchair, QrCode, Bike, ReceiptText, Settings2, type LucideIcon } from 'lucide-react'
 
 const navigationGroups = [
   { label: 'Món', icon: Menu, items: [{ to: '/management/menu-items', label: 'Danh sách món' }] },
@@ -44,12 +44,41 @@ export function ManagementLayout() {
       <NavLink to="/management/inventory" className={({ isActive }) => `mobile-tab ${isActive || location.pathname.includes('stock-check') ? 'active' : ''}`}><Boxes size={19} /><span>Kho</span></NavLink>
       <button type="button" className={`mobile-tab ${moreOpen ? 'active' : ''}`} aria-expanded={moreOpen} onClick={() => setMoreOpen((open) => !open)}><MoreHorizontal size={19} /><span>Thêm</span></button>
     </nav>
-    {moreOpen && <div className="mobile-more-menu"><strong>Quản lý cửa hàng</strong>{navigationGroups.flatMap((group) => group.items.map((item) => <NavLink key={item.to} to={item.to} onClick={() => setMoreOpen(false)}>{item.label}</NavLink>))}<NavLink to="/management/cashbook" onClick={() => setMoreOpen(false)}>Sổ quỹ</NavLink><NavLink to="/pos" onClick={() => setMoreOpen(false)}>Mở POS</NavLink><button type="button" onClick={() => setMoreOpen(false)}><X size={15} /> Đóng menu</button></div>}
-
-    <main className="management-main">
+    <main className={`management-main ${moreOpen ? 'more-screen-open' : ''}`}>
       <header className="topbar"><div className="topbar-heading"><span className="breadcrumb">Quản lý cửa hàng</span><strong>{title}</strong></div><div className="topbar-actions"><NavLink to="/pos" className="pos-shortcut"><CreditCard size={16} /> Mở POS</NavLink><span className="online-pill"><i /> Online</span><button className="icon-button" type="button" aria-label="Thông báo"><Bell size={18} /><i className="notification-dot" /></button><button className="branch-selector" type="button"><span className="branch-avatar">M</span><span><small>Chi nhánh</small><strong>Mộc Store · Quận 1</strong></span><ChevronDown size={15} /></button></div></header>
-      <div className="page-content"><Outlet /></div>
+      <div className="page-content">{moreOpen ? <MobileMorePage onNavigate={() => setMoreOpen(false)} /> : <Outlet />}</div>
     </main>
+  </div>
+}
+
+const moreSections = [
+  { title: 'Thực đơn', links: [
+    { label: 'Món', to: '/management/menu-items', icon: Utensils }, { label: 'Thiết lập giá', to: '/management/menu-items', icon: Tags },
+    { label: 'ShopeeFood', to: '/management/menu-items', icon: ShoppingBag, badge: 'Mới' }, { label: 'GrabFood', to: '/management/menu-items', icon: ShoppingBag, badge: 'Mới' },
+    { label: 'Ghi chú món', to: '/management/menu-items', icon: NotebookText },
+  ] },
+  { title: 'Phòng bàn', links: [
+    { label: 'Phòng bàn', to: '/management/rooms', icon: Armchair }, { label: 'Gọi món qua mã QR', to: '/management/rooms', icon: QrCode },
+    { label: 'Giao đi', to: '/management/orders', icon: Bike, badge: 'Mới' },
+  ] },
+  { title: 'Hóa đơn', links: [
+    { label: 'Hóa đơn', to: '/management/invoices', icon: ReceiptText }, { label: 'Trả hàng', to: '/management/returns', icon: ArrowLeftRight },
+  ] },
+  { title: 'Quản lý', links: [
+    { label: 'Khách hàng', to: '/management/customers', icon: Users }, { label: 'Nhân viên', to: '/management/employees', icon: UserRoundCog },
+    { label: 'Sổ quỹ', to: '/management/cashbook', icon: Wallet }, { label: 'Thiết lập', to: '/management/employee-settings', icon: Settings2 },
+  ] },
+]
+
+function MobileMorePage({ onNavigate }: { onNavigate: () => void }) {
+  return <div className="mobile-more-page">
+    <section className="mobile-more-profile">
+      <div className="mobile-more-user"><span className="mobile-more-avatar"><CircleUserRound size={32} /></span><div><strong>Chí Hồ</strong><button type="button">Chi nhánh trung tâm <ChevronDown size={14} /></button></div></div>
+      <NavLink to="/management/employee-settings" onClick={onNavigate}><span>Thông tin hợp đồng</span><ChevronRight size={20} /></NavLink>
+      <NavLink to="/management/employees" onClick={onNavigate}><span>Tài khoản</span><span className="mobile-more-account">ADMIN <ChevronRight size={20} /></span></NavLink>
+    </section>
+    {moreSections.map((section) => <section className="mobile-more-section" key={section.title}><h2>{section.title}</h2><div>{section.links.map(({ label, to, icon: Icon, badge }) => <NavLink to={to} key={label} onClick={onNavigate}><Icon size={22} /><span>{label}</span>{badge && <small>{badge}</small>}</NavLink>)}</div></section>)}
+    <NavLink className="mobile-more-pos" to="/pos" onClick={onNavigate}><CreditCard size={18} /> Mở màn hình bán hàng POS <ChevronRight size={18} /></NavLink>
   </div>
 }
 
