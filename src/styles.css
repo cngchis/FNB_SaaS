@@ -419,6 +419,7 @@ kbd { flex: 0 0 auto; padding: 2px 4px; color: #8e9991; border: 1px solid #e7ebe
 .record-actions, .report-actions { display: flex; align-items: center; gap: 8px; }
 .record-actions .button, .report-actions .button { min-height: 34px; padding: 0 11px; font-size: 10px; }
 .record-metrics, .report-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 15px; }
+.record-page-cashbook .record-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .record-metric, .report-metric { display: flex; min-height: 90px; flex-direction: column; gap: 6px; padding: 13px 15px; border: 1px solid #e8ede9; border-radius: var(--radius); background: #fff; box-shadow: var(--shadow); }
 .record-metric span, .report-metric > span { color: #748078; font-size: 9px; }
 .record-metric strong, .report-metric strong { color: #253229; font-size: 17px; letter-spacing: -.02em; font-weight: 650; }
@@ -439,6 +440,48 @@ kbd { flex: 0 0 auto; padding: 2px 4px; color: #8e9991; border: 1px solid #e7ebe
 .record-row-actions { display: flex; align-items: center; gap: 2px; }
 .record-delete { display: grid; width: 28px; height: 28px; place-items: center; color: #9a786e; border: 0; border-radius: 6px; background: transparent; cursor: pointer; }
 .record-delete:hover { color: #b74737; background: #fff3f1; }
+.record-expandable-row { cursor: pointer; }
+.record-expandable-row:hover { background: #f8fbf8; }
+.record-detail-row > td { height: auto; padding: 10px 14px !important; background: #f7faf7; }
+.record-detail-content { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 18px; color: #68756c; font-size: 10px; }
+.record-detail-content strong { color: #354239; }
+.record-detail-content img { width: 44px; height: 44px; border-radius: 6px; object-fit: cover; }
+.product-image-preview { display: flex; align-items: flex-end; gap: 9px; }
+.unit-editor-row { display: grid; grid-template-columns: minmax(100px, 1fr) repeat(3, minmax(80px, .8fr)) auto; align-items: end; gap: 7px; margin-top: 8px; }
+.unit-editor-row label { display: grid; gap: 4px; color: #78847c; font-size: 9px; }
+.unit-editor-row input { width: 100%; height: 34px; padding: 0 8px; color: #334037; border: 1px solid #dfe7e1; border-radius: 6px; background: #fff; font-size: 10px; }
+.unit-editor-row button { height: 34px; width: 30px; color: #9a786e; border: 0; border-radius: 6px; background: #fff6f4; font-size: 18px; cursor: pointer; }
+.unit-editor-row small { grid-column: 1 / -1; color: #8a958d; font-size: 9px; }
+.cashbook-tabs { align-items: center; margin: 0 0 13px; }
+.cashbook-tabs .button { margin-left: auto; text-decoration: none; }
+.cashbook-date-filters { display: flex; align-items: center; gap: 7px; }
+.cashbook-date-filters label { display: flex; align-items: center; gap: 5px; color: #78847c; font-size: 9px; }
+.cashbook-date-filters input, .cashbook-date-filters select { height: 29px; padding: 0 7px; color: #536159; border: 1px solid #e7ece8; border-radius: 6px; background: #fff; font: inherit; font-size: 9px; }
+.cashbook-tabs .record-filters button { min-height: 32px; padding: 0 14px; }
+.cashbook-date-filters { flex-wrap: wrap; }
+.stock-voucher-meta { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; padding: 14px; }
+.stock-voucher-meta .form-label { margin: 0; }
+.voucher-search-results { display: grid; max-height: 225px; overflow: auto; gap: 4px; margin: 10px 0; }
+.voucher-search-results button { display: flex; min-height: 48px; align-items: center; gap: 10px; padding: 7px 10px; color: #39463d; text-align: left; border: 1px solid #edf1ed; border-radius: 7px; background: #fff; cursor: pointer; }
+.voucher-search-results button > span { display: grid; flex: 1; gap: 3px; }
+.voucher-search-results small { color: #89948c; font-size: 9px; }
+.voucher-search-results button > svg:last-child { color: var(--green); }
+.voucher-quantity { width: 94px; height: 30px; padding: 0 7px; border: 1px solid #dfe7e1; border-radius: 6px; }
+.voucher-filter-panel { display: flex; align-items: center; gap: 12px; padding: 10px; border: 1px solid #edf1ed; border-radius: 7px; color: #78847c; font-size: 10px; }
+.voucher-filter-panel label { display: flex; align-items: center; gap: 6px; }
+.purchase-total { display: flex; justify-content: flex-end; gap: 18px; padding: 14px; color: #68756c; font-size: 11px; }
+.purchase-total strong { color: var(--green); font-size: 15px; }
+.invoice-detail-panel { margin-top: 12px; padding: 12px; border-radius: 8px; background: #f5f9f6; }
+.invoice-detail-panel > div { display: flex; justify-content: space-between; margin-bottom: 8px; color: #354239; }
+.invoice-detail-panel button { color: #78847c; border: 0; background: none; cursor: pointer; }
+.invoice-detail-panel p { display: flex; justify-content: space-between; margin: 6px 0; color: #78847c; font-size: 10px; }
+.invoice-detail-panel p strong { color: #354239; }
+.product-option-button { display: flex; width: 100%; min-height: 42px; align-items: center; gap: 8px; margin: 6px 0; padding: 0 10px; color: #354239; border: 1px solid #e7ece8; border-radius: 7px; background: #fff; text-align: left; cursor: pointer; }
+.product-option-button small { color: #8a958d; }
+.product-option-button strong { margin-left: auto; color: var(--green); }
+.product-options-dialog { width: min(100%, 390px); }
+.recent-order-row { width: 100%; color: inherit; text-align: left; cursor: pointer; }
+.recent-order-row:hover { background: #f6faf7; }
 .record-dialog { width: min(100%, 580px); max-height: 90vh; overflow-y: auto; }
 .record-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 17px; }
 .record-form-grid .form-label { margin: 0; }

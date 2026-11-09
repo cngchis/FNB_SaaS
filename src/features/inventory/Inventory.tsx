@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { ChevronDown, ChevronLeft, ChevronRight, ClipboardCheck, Download, MoreHorizontal, PackagePlus, Search, SlidersHorizontal, X } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronRight, ClipboardCheck, Download, MoreHorizontal, PackagePlus, Plus, Search, SlidersHorizontal, X } from 'lucide-react'
 import { formatCurrency, inventorySummary, products } from '../../services/mockData'
 import { ProductArtwork } from '../../components/ProductArtwork'
 import type { Product } from '../../types'
@@ -7,7 +7,14 @@ import type { Product } from '../../types'
 type InventoryProps = { stockCheck?: boolean }
 
 export function Inventory({ stockCheck = false }: InventoryProps) {
-  const [rows, setRows] = useState(products)
+  const catalog = useMemo(() => {
+    try {
+      const saved: unknown = JSON.parse(localStorage.getItem('fnb-management:menu-items') ?? 'null')
+      if (Array.isArray(saved)) return saved.filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null && item.productType === 'Hàng hóa thường').map((item, index) => ({ id: String(item.code ?? index), sku: String(item.code ?? `M${index}`), name: String(item.name ?? 'Hàng hóa'), category: String(item.category ?? 'Khác'), price: Number(item.price ?? 0), stock: Number(item.stock ?? 0), minimum: Number(item.minimum ?? 0), color: '#e5e9e4', image: String(item.image ?? '') }))
+    } catch { /* use bundled inventory data */ }
+    return products.filter((product) => ['retail-01'].includes(product.id))
+  }, [])
+  const [rows, setRows] = useState(stockCheck ? [] : catalog)
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('Tất cả danh mục')
   const [stockFilter, setStockFilter] = useState('Tất cả trạng thái')
@@ -15,6 +22,8 @@ export function Inventory({ stockCheck = false }: InventoryProps) {
   const [selected, setSelected] = useState<Product | null>(null)
   const [quantity, setQuantity] = useState('')
   const [notice, setNotice] = useState('')
+  const [showAll, setShowAll] = useState(false)
+  const stockCheckResults = useMemo(() => catalog.filter((product) => `${product.name} ${product.sku}`.toLocaleLowerCase('vi').includes(search.toLocaleLowerCase('vi'))).filter((product) => !rows.some((row) => row.id === product.id)), [catalog, search, rows])
 
   const filtered = useMemo(() => rows.filter((product) => {
     const matchesSearch = `${product.name} ${product.sku}`.toLocaleLowerCase('vi').includes(search.toLocaleLowerCase('vi'))
@@ -35,6 +44,14 @@ export function Inventory({ stockCheck = false }: InventoryProps) {
   }
 
   const stockUnits = rows.reduce((total, product) => total + product.stock, 0)
+
+  if (stockCheck) return <div className="inventory-page stock-voucher-page">
+    <div className="page-title-row"><div><div className="record-breadcrumb">Hàng hóa <span>/</span> Kiểm kho</div><h1>Tạo phiếu kiểm kho</h1><p>Phiếu mới đang trống. Tìm sản phẩm để thêm vào danh sách kiểm đếm.</p></div><div className="page-actions"><button className="button button-secondary" type="button" onClick={() => window.history.back()}>Hủy</button><button className="button button-primary" type="button" disabled={!rows.length} onClick={() => setNotice('Đã lưu phiếu kiểm kho demo.')}>Lưu phiếu kiểm kho</button></div></div>
+    <section className="panel stock-voucher-meta"><label className="form-label">Mã phiếu<input value={`KK${new Date().toISOString().slice(2, 10).replaceAll('-', '')}-001`} readOnly /></label><label className="form-label">Chi nhánh<select><option>Mộc Store · Quận 1</option><option>Mộc Store · Quận 3</option></select></label><label className="form-label">Ghi chú<input placeholder="Ghi chú phiếu kiểm kho" /></label></section>
+    <section className="panel inventory-list-panel"><div className="inventory-toolbar"><label className="search-field"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm tên hàng hoặc mã hàng..." /></label><div className="filter-actions"><button className="button button-secondary" type="button" onClick={() => setStockFilter((value) => value === 'Tất cả trạng thái' ? 'Sắp hết' : 'Tất cả trạng thái')}><SlidersHorizontal size={15} /> Bộ lọc</button><button className="button button-secondary" type="button" onClick={() => setShowAll((value) => !value)}>{showAll ? 'Ẩn danh sách' : 'Hiển thị tất cả'}</button></div></div>
+      {(search || showAll) && <div className="voucher-search-results">{stockCheckResults.filter((product) => stockFilter !== 'Sắp hết' || product.stock <= product.minimum).map((product) => <button type="button" key={product.id} onClick={() => setRows((current) => [...current, product])}><ProductArtwork product={product} compact /><span><strong>{product.name}</strong><small>{product.sku} · Tồn hệ thống {product.stock}</small></span><Plus size={16} /></button>)}</div>}
+      {rows.length ? <div className="table-scroll"><table className="data-table inventory-table"><thead><tr><th>Sản phẩm</th><th>Tồn hệ thống</th><th>Số lượng thực tế</th><th>Chênh lệch</th><th /></tr></thead><tbody>{rows.map((product) => <tr key={product.id}><td><strong>{product.name}</strong><small>{product.sku}</small></td><td>{product.stock}</td><td><input className="voucher-quantity" type="number" min="0" defaultValue={product.stock} /></td><td>—</td><td><button className="record-delete" type="button" aria-label={`Xóa ${product.name}`} onClick={() => setRows((current) => current.filter((row) => row.id !== product.id))}><X size={15} /></button></td></tr>)}</tbody></table></div> : <div className="empty-state"><ClipboardCheck size={24} /><strong>Phiếu kiểm kho chưa có sản phẩm</strong><span>Nhập từ khóa để tìm hàng hoặc chọn “Hiển thị tất cả”.</span></div>}</section>{notice && <div className="toast" role="status">{notice}</div>}
+  </div>
 
   const exportCsv = () => {
     const rowsToExport = [

@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react'
-import { ChevronLeft, ChevronRight, Download, Pencil, Plus, Search, X } from 'lucide-react'
+import { Fragment, useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react'
+import { ChevronLeft, ChevronRight, Download, PackagePlus, Pencil, Plus, Search, SlidersHorizontal, X } from 'lucide-react'
 import { formatCurrency } from '../../services/mockData'
 import { managementModules, type ManagementModule, type ManagementRow, type ManagementValue } from './moduleConfig'
 
@@ -50,6 +50,21 @@ function displayValue(value: ManagementValue, type?: string) {
   return String(value)
 }
 
+function FragmentRow({ module, row, expanded, onExpand, onEdit, onDelete }: { module: ManagementModule; row: ManagementRow; expanded: boolean; onExpand: () => void; onEdit: () => void; onDelete: () => void }) {
+  const canExpand = module.id === 'menu-items' || module.id === 'suppliers'
+  return <Fragment>
+    <tr className={canExpand ? 'record-expandable-row' : ''} onClick={canExpand ? onExpand : undefined} aria-expanded={canExpand ? expanded : undefined}>
+      {module.columns.map((column, columnIndex) => <td key={column.key} data-label={column.label} className={`record-field-${column.key} ${column.type === 'status' ? 'record-status-cell' : ''} ${columnIndex === 0 ? 'record-primary-cell' : ''}`}>
+        {column.type === 'status' ? <span className={`status-badge ${/đã|đang|hoàn tất|xác nhận/i.test(String(row[column.key])) ? 'in-stock' : 'low'}`}><i />{displayValue(row[column.key] ?? '', column.type)}</span> : module.id === 'menu-items' && column.key === 'stock' && row.productType === 'Chế biến' ? '—' : displayValue(row[column.key] ?? '', column.type)}
+      </td>)}
+      <td className="record-row-actions"><button type="button" className="row-menu" aria-label={`Sửa ${String(row[module.columns[0].key] ?? '')}`} onClick={(event) => { event.stopPropagation(); onEdit() }}><Pencil size={15} /></button><button type="button" className="record-delete" aria-label={`Xóa ${String(row[module.columns[0].key] ?? '')}`} onClick={(event) => { event.stopPropagation(); onDelete() }}><X size={15} /></button></td>
+    </tr>
+    {canExpand && expanded && <tr className="record-detail-row"><td colSpan={module.columns.length + 1}><div className="record-detail-content">
+      {module.id === 'menu-items' ? <><strong>{String(row.name ?? '')}</strong><span>Mã hàng: {String(row.code ?? '—')}</span><span>Loại hàng: {String(row.productType ?? '—')}</span><span>Thực đơn: {String(row.menuType ?? '—')}</span><span>Giá vốn: {row.productType === 'Chế biến' ? '—' : formatCurrency(Number(row.cost ?? 0))}</span><span>{row.productType === 'Chế biến' ? 'Không quản lý tồn kho' : `Tồn kho: ${String(row.stock ?? 0)}`}</span><span>Hiển thị: {row.visible ? 'Có' : 'Không'} · Món thêm: {row.extra ? 'Có' : 'Không'} · Tích điểm: {row.points ? 'Có' : 'Không'}</span>{typeof row.image === 'string' && row.image && <img src={row.image} alt="Ảnh sản phẩm" />}</> : <><strong>{String(row.name ?? '')}</strong><span>Người liên hệ: {String(row.contact ?? '—')}</span><span>Điện thoại: {String(row.phone ?? '—')}</span><span>Công nợ: {formatCurrency(Number(row.debt ?? 0))}</span><span>Địa chỉ: {String(row.address ?? 'Chưa cập nhật')}</span><span>Ghi chú: {String(row.note ?? '—')}</span></>}
+    </div></td></tr>}
+  </Fragment>
+}
+
 function nextCode(rows: ManagementRow[], prefix: string, digits: number) {
   const highest = rows.reduce((max, row) => {
     const code = String(row.code ?? '')
@@ -62,7 +77,45 @@ function nextCode(rows: ManagementRow[], prefix: string, digits: number) {
 export function ManagementRecordPage({ moduleId }: { moduleId: string }) {
   const module = managementModules.find((item) => item.id === moduleId)
   if (!module) return null
+  if (moduleId === 'purchases') return <PurchaseWorkspace />
   return <RecordWorkspace key={module.id} module={module} />
+}
+
+function PurchaseWorkspace() {
+  const [query, setQuery] = useState('')
+  const [showAll, setShowAll] = useState(false)
+  const [filterOpen, setFilterOpen] = useState(false)
+  const [lines, setLines] = useState<{ product: ManagementRow; quantity: number; cost: number }[]>([])
+  const [createProduct, setCreateProduct] = useState(false)
+  const [notice, setNotice] = useState('')
+  const catalog = useMemo(() => {
+    try { const saved: unknown = JSON.parse(localStorage.getItem(storageKey('menu-items')) ?? 'null'); return Array.isArray(saved) ? saved as ManagementRow[] : managementModules.find((item) => item.id === 'menu-items')?.rows ?? [] } catch { return [] }
+  }, [])
+  const matches = catalog.filter((product) => `${product.name} ${product.code}`.toLocaleLowerCase('vi').includes(query.toLocaleLowerCase('vi')) && !lines.some((line) => line.product.code === product.code))
+  const addProduct = (product: ManagementRow) => setLines((current) => [...current, { product, quantity: 1, cost: Number(product.cost ?? 0) }])
+  const total = lines.reduce((sum, line) => sum + line.quantity * line.cost, 0)
+  const saveVoucher = () => {
+    if (!lines.length) return
+    const saved = JSON.parse(localStorage.getItem(storageKey('purchases')) ?? 'null') as ManagementRow[] | null
+    const history = Array.isArray(saved) ? saved : managementModules.find((item) => item.id === 'purchases')?.rows ?? []
+    const code = `PN-${String(history.length + 83).padStart(4, '0')}`
+    localStorage.setItem(storageKey('purchases'), JSON.stringify([{ code, date: new Date().toLocaleDateString('vi-VN'), supplier: 'Chưa chọn', items: lines.length, amount: total, status: 'Chờ thanh toán', detail: lines.map((line) => `${line.product.name} ×${line.quantity}`).join(', ') }, ...history]))
+    setNotice(`Đã lưu phiếu nhập ${code} trong dữ liệu demo.`); setLines([]); window.setTimeout(() => setNotice(''), 3000)
+  }
+  const saveNewProduct = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const data = new FormData(event.currentTarget)
+    const code = nextCode(catalog, 'M', 5)
+    const product: ManagementRow = { code, name: String(data.get('name') ?? ''), category: String(data.get('category') ?? 'Khác'), productType: 'Hàng hóa thường', menuType: 'Khác', price: Number(data.get('price')), cost: Number(data.get('cost')), stock: 0, visible: true, extra: false, points: true, attributes: '[]', units: '[]' }
+    const next = [product, ...catalog]; localStorage.setItem(storageKey('menu-items'), JSON.stringify(next)); setShowAll(true); setCreateProduct(false); addProduct(product)
+  }
+  return <section className="record-page record-page-purchases"><div className="page-title-row"><div><div className="record-breadcrumb">Nhập hàng</div><h1>Tạo phiếu nhập hàng</h1><p>Phiếu mới bắt đầu trống. Tìm hàng hóa để thêm vào phiếu.</p></div><button className="button button-primary" type="button" disabled={!lines.length} onClick={saveVoucher}>Lưu phiếu nhập</button></div>
+    <section className="panel stock-voucher-meta"><label className="form-label">Nhà cung cấp<select><option>Chọn nhà cung cấp</option>{(managementModules.find((item) => item.id === 'suppliers')?.rows ?? []).map((row) => <option key={String(row.name)}>{String(row.name)}</option>)}</select></label><label className="form-label">Chi nhánh<select><option>Mộc Store · Quận 1</option><option>Mộc Store · Quận 3</option></select></label><label className="form-label">Ghi chú<input placeholder="Ghi chú phiếu nhập" /></label></section>
+    <section className="panel inventory-list-panel"><div className="inventory-toolbar"><label className="search-field"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm tên hàng hoặc mã hàng..." /></label><div className="filter-actions"><button className="button button-secondary" type="button" onClick={() => setFilterOpen((value) => !value)}><SlidersHorizontal size={15} /> Bộ lọc</button><button className="button button-secondary" type="button" onClick={() => setShowAll((value) => !value)}>{showAll ? 'Ẩn danh sách' : 'Hiển thị tất cả'}</button><button className="button button-primary" type="button" onClick={() => setCreateProduct(true)}><Plus size={15} /> Tạo mới hàng hóa</button></div></div>{filterOpen && <div className="voucher-filter-panel"><label>Loại hàng<select><option>Hàng hóa thường</option></select></label><span>Chỉ tìm hàng hóa có quản lý tồn kho.</span></div>}
+      {(query || showAll) && <div className="voucher-search-results">{matches.filter((product) => product.productType === 'Hàng hóa thường').map((product) => <button type="button" key={String(product.code)} onClick={() => addProduct(product)}><span><strong>{String(product.name)}</strong><small>{String(product.code)} · Giá vốn {formatCurrency(Number(product.cost ?? 0))}</small></span><Plus size={16} /></button>)}</div>}
+      {lines.length ? <><div className="table-scroll"><table className="data-table inventory-table"><thead><tr><th>Hàng hóa</th><th>Đơn vị</th><th>Số lượng</th><th>Giá nhập</th><th>Thành tiền</th><th /></tr></thead><tbody>{lines.map((line) => <tr key={String(line.product.code)}><td><strong>{String(line.product.name)}</strong><small>{String(line.product.code)}</small></td><td>Cái</td><td><input className="voucher-quantity" type="number" min="1" value={line.quantity} onChange={(event) => setLines((current) => current.map((item) => item === line ? { ...item, quantity: Number(event.target.value) } : item))} /></td><td><input className="voucher-quantity" type="number" min="0" value={line.cost} onChange={(event) => setLines((current) => current.map((item) => item === line ? { ...item, cost: Number(event.target.value) } : item))} /></td><td>{formatCurrency(line.quantity * line.cost)}</td><td><button className="record-delete" type="button" onClick={() => setLines((current) => current.filter((item) => item !== line))}><X size={15} /></button></td></tr>)}</tbody></table></div><div className="purchase-total"><span>Tổng tiền hàng</span><strong>{formatCurrency(total)}</strong></div></> : <div className="empty-state"><PackagePlus size={24} /><strong>Phiếu nhập chưa có hàng hóa</strong><span>Tìm kiếm sản phẩm hoặc chọn “Hiển thị tất cả”.</span></div>}</section>
+    {notice && <div className="toast" role="status">{notice}</div>}{createProduct && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setCreateProduct(false) }}><section className="modal-card record-dialog" role="dialog" aria-modal="true"><button className="modal-close" type="button" onClick={() => setCreateProduct(false)} aria-label="Đóng"><X size={18} /></button><h2>Tạo hàng hóa mới</h2><p>Sản phẩm mới được lưu trong danh sách món và thêm vào phiếu nhập.</p><form onSubmit={saveNewProduct}><label className="form-label">Tên hàng<input name="name" required /></label><label className="form-label">Nhóm hàng<select name="category"><option>Cà phê</option><option>Trà</option><option>Bia</option><option>Đồ ăn</option><option>Khác</option></select></label><label className="form-label">Giá bán<input name="price" type="number" min="0" required /></label><label className="form-label">Giá vốn<input name="cost" type="number" min="0" required /></label><div className="modal-actions"><button className="button button-secondary" type="button" onClick={() => setCreateProduct(false)}>Hủy</button><button className="button button-primary" type="submit">Tạo và thêm vào phiếu</button></div></form></section></div>}
+  </section>
 }
 
 function RecordWorkspace({ module }: { module: ManagementModule }) {
@@ -76,6 +129,11 @@ function RecordWorkspace({ module }: { module: ManagementModule }) {
   const [editing, setEditing] = useState<ManagementRow | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<ManagementRow | null>(null)
   const [notice, setNotice] = useState('')
+  const [expandedRow, setExpandedRow] = useState<string | null>(null)
+  const [cashTab, setCashTab] = useState('Tổng quỹ')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [branchFilter, setBranchFilter] = useState('Tất cả chi nhánh')
 
   useEffect(() => {
     try { localStorage.setItem(storageKey(module.id), JSON.stringify(rows)) } catch { setNotice('Không thể lưu dữ liệu demo trên thiết bị.') }
@@ -85,7 +143,14 @@ function RecordWorkspace({ module }: { module: ManagementModule }) {
     const result = rows.filter((row) => {
       const matchesText = Object.values(row).some((value) => String(value).toLocaleLowerCase('vi').includes(query.toLocaleLowerCase('vi')))
       const matchesFilter = filter === 'Tất cả' || Object.values(row).some((value) => String(value) === filter)
-      return matchesText && matchesFilter
+      const matchesCashTab = module.id !== 'cashbook' || cashTab === 'Tổng quỹ' || (cashTab === 'Ngân hàng' ? row.method === 'Chuyển khoản' : row.method === 'Tiền mặt')
+      const branch = String(row.branch ?? '')
+      const matchesBranch = module.id !== 'cashbook' || branchFilter === 'Tất cả chi nhánh' || branch === branchFilter
+      const dateText = String(row.date ?? '').split(' ')[0]
+      const [day, month, year] = dateText.split('/')
+      const rowDate = day && month && year ? `${year}-${month}-${day}` : ''
+      const matchesDate = module.id !== 'cashbook' || ((!dateFrom || (rowDate && rowDate >= dateFrom)) && (!dateTo || (rowDate && rowDate <= dateTo)))
+      return matchesText && matchesFilter && matchesCashTab && matchesBranch && matchesDate
     })
     if (sortKey) result.sort((left, right) => {
       const a = left[sortKey] ?? ''
@@ -94,7 +159,7 @@ function RecordWorkspace({ module }: { module: ManagementModule }) {
       return ascending ? comparison : -comparison
     })
     return result
-  }, [filter, query, rows, sortKey, ascending])
+  }, [filter, query, rows, sortKey, ascending, module.id, cashTab, dateFrom, dateTo, branchFilter])
 
   const pageCount = Math.max(1, Math.ceil(filteredRows.length / pageSize))
   const visibleRows = filteredRows.slice((page - 1) * pageSize, page * pageSize)
@@ -145,17 +210,13 @@ function RecordWorkspace({ module }: { module: ManagementModule }) {
   return <section className={`record-page record-page-${module.id}`}>
     <div className="page-title-row"><div><div className="record-breadcrumb">Quản lý cửa hàng <span>/</span> {module.title}</div><h1>{module.title}</h1><p>{module.description}</p></div><div className="record-actions"><button className="button button-secondary" type="button" onClick={exportCsv}><Download size={15} /> Xuất file</button><button className="button button-primary" type="button" onClick={() => { setEditing(null); setFormOpen(true) }}><Plus size={16} /> Thêm {module.entity}</button></div></div>
 
+    {module.id === 'cashbook' && <div className="record-filters cashbook-tabs">{['Tiền mặt', 'Ngân hàng', 'Tổng quỹ'].map((tab) => <button type="button" key={tab} className={cashTab === tab ? 'active' : ''} onClick={() => setCashTab(tab)}>{tab}</button>)}<a className="button button-secondary" href="/management/bank-accounts">Tài khoản ngân hàng</a></div>}
     <div className="record-metrics">{module.metrics.map((metric) => <article className="record-metric" key={metric.label}><span>{metric.label}</span><strong>{metric.value}</strong><small>{metric.hint}</small></article>)}</div>
 
     <section className="panel record-table-panel">
-      <div className="record-toolbar"><label className="search-field"><Search size={16} /><input aria-label={module.searchPlaceholder} value={query} onChange={(event) => { setQuery(event.target.value); setPage(1) }} placeholder={module.searchPlaceholder} /><kbd>⌘ K</kbd></label><div className="record-filters"><button type="button" className={filter === 'Tất cả' ? 'active' : ''} onClick={() => { setFilter('Tất cả'); setPage(1) }}>Tất cả</button>{module.filters?.map((item) => <button type="button" key={item} className={filter === item ? 'active' : ''} onClick={() => { setFilter(item); setPage(1) }}>{item}</button>)}</div></div>
+      <div className="record-toolbar"><label className="search-field"><Search size={16} /><input aria-label={module.searchPlaceholder} value={query} onChange={(event) => { setQuery(event.target.value); setPage(1) }} placeholder={module.searchPlaceholder} /><kbd>⌘ K</kbd></label>{module.id === 'cashbook' && <div className="cashbook-date-filters"><label>Từ<input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} /></label><label>Đến<input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} /></label><select aria-label="Chi nhánh sổ quỹ" value={branchFilter} onChange={(event) => setBranchFilter(event.target.value)}><option>Tất cả chi nhánh</option><option>Mộc Store · Quận 1</option><option>Mộc Store · Quận 3</option></select></div>}<div className="record-filters"><button type="button" className={filter === 'Tất cả' ? 'active' : ''} onClick={() => { setFilter('Tất cả'); setPage(1) }}>Tất cả</button>{module.filters?.map((item) => <button type="button" key={item} className={filter === item ? 'active' : ''} onClick={() => { setFilter(item); setPage(1) }}>{item}</button>)}</div></div>
       <div className="table-scroll"><table className="data-table record-table"><thead><tr>{module.columns.map((column) => <th key={column.key}><button type="button" onClick={() => toggleSort(column.key)}>{column.label}<span aria-hidden="true">{sortKey === column.key ? ascending ? ' ↑' : ' ↓' : ' ↕'}</span></button></th>)}<th aria-label="Thao tác" /></tr></thead><tbody>
-        {visibleRows.map((row, rowIndex) => <tr key={`${module.id}-${row.__id ?? row.code ?? row.name ?? row.employee ?? rowIndex}-${rowIndex}`}>
-          {module.columns.map((column, columnIndex) => <td key={column.key} data-label={column.label} className={`record-field-${column.key} ${column.type === 'status' ? 'record-status-cell' : ''} ${columnIndex === 0 ? 'record-primary-cell' : ''}`}>
-            {column.type === 'status' ? <span className={`status-badge ${/đã|đang|hoàn tất|xác nhận/i.test(String(row[column.key])) ? 'in-stock' : 'low'}`}><i />{displayValue(row[column.key] ?? '', column.type)}</span> : module.id === 'menu-items' && column.key === 'stock' && row.productType === 'Chế biến' ? '—' : displayValue(row[column.key] ?? '', column.type)}
-          </td>)}
-          <td className="record-row-actions"><button type="button" className="row-menu" aria-label={`Sửa ${String(row[module.columns[0].key] ?? '')}`} onClick={() => { setEditing(row); setFormOpen(true) }}><Pencil size={15} /></button><button type="button" className="record-delete" aria-label={`Xóa ${String(row[module.columns[0].key] ?? '')}`} onClick={() => setDeleteTarget(row)}><X size={15} /></button></td>
-        </tr>)}
+        {visibleRows.map((row, rowIndex) => <FragmentRow key={`${module.id}-${row.__id ?? row.code ?? row.name ?? row.employee ?? rowIndex}-${rowIndex}`} module={module} row={row} expanded={expandedRow === String(row.__id ?? row.code ?? row.name ?? rowIndex)} onExpand={() => setExpandedRow((current) => current === String(row.__id ?? row.code ?? row.name ?? rowIndex) ? null : String(row.__id ?? row.code ?? row.name ?? rowIndex))} onEdit={() => { setEditing(row); setFormOpen(true) }} onDelete={() => setDeleteTarget(row)} />)}
       </tbody></table></div>
       {filteredRows.length === 0 && <div className="empty-state"><Search size={23} /><strong>Không tìm thấy dữ liệu</strong><span>Thử thay đổi từ khóa hoặc bộ lọc.</span></div>}
       <div className="table-footer"><span>Hiển thị <strong>{filteredRows.length ? (page - 1) * pageSize + 1 : 0}–{Math.min(page * pageSize, filteredRows.length)}</strong> trong <strong>{filteredRows.length}</strong> {module.entity}</span><div className="pagination"><button type="button" aria-label="Trang trước" disabled={page === 1} onClick={() => setPage((current) => current - 1)}><ChevronLeft size={16} /></button><button className="current-page" type="button">{page} / {pageCount}</button><button type="button" aria-label="Trang sau" disabled={page === pageCount} onClick={() => setPage((current) => current + 1)}><ChevronRight size={16} /></button></div></div>
@@ -207,7 +268,7 @@ function MultiSelectField({ field, defaultValue }: { field: ManagementModule['fi
 }
 
 type ProductAttribute = { name: string; value: string }
-type ProductUnit = { name: string; ratio: number }
+type ProductUnit = { name: string; ratio: number; cost: number; price: number }
 
 function ProductEditor({ initial, nextProductCode, onCancel, onSave }: { initial: ManagementRow | null; nextProductCode: string; onCancel: () => void; onSave: (values: ManagementRow) => void }) {
   const [productType, setProductType] = useState(String(initial?.productType ?? 'Hàng hóa thường'))
@@ -218,7 +279,7 @@ function ProductEditor({ initial, nextProductCode, onCancel, onSave }: { initial
   const [selectedCategory, setSelectedCategory] = useState(String(initial?.category ?? 'Cà phê'))
   const [image, setImage] = useState(String(initial?.image ?? ''))
   const [attributes, setAttributes] = useState<ProductAttribute[]>(() => parseRows<ProductAttribute>(initial?.attributes))
-  const [units, setUnits] = useState<ProductUnit[]>(() => parseRows<ProductUnit>(initial?.units))
+  const [units, setUnits] = useState<ProductUnit[]>(() => parseRows<ProductUnit>(initial?.units).map((unit) => ({ ...unit, cost: Number(unit.cost ?? initial?.cost ?? 0), price: Number(unit.price ?? Number(initial?.price ?? 0) * unit.ratio) })))
   const [error, setError] = useState('')
   const [compressing, setCompressing] = useState(false)
   const onImageChange = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -229,7 +290,7 @@ function ProductEditor({ initial, nextProductCode, onCancel, onSave }: { initial
     try { setImage(await compressImage(file)) } catch { setError('Không thể đọc hình ảnh đã chọn.') } finally { setCompressing(false) }
   }
   const addCategory = () => {
-    const value = newCategory.trim()
+    const value = (newCategory === '__open__' ? '' : newCategory).trim()
     if (!value) return
     const updated = [...new Set([...categories, value])]
     setCategories(updated); setSelectedCategory(value); setNewCategory('')
@@ -247,7 +308,7 @@ function ProductEditor({ initial, nextProductCode, onCancel, onSave }: { initial
     <div className="record-form-grid">
       <label className="form-label">Mã hàng<input value={nextProductCode} readOnly /></label>
       <label className="form-label">Tên hàng<input name="name" required defaultValue={String(initial?.name ?? '')} /></label>
-      <label className="form-label">Nhóm hàng<select name="category" value={selectedCategory} onChange={(event) => setSelectedCategory(event.target.value)}>{categories.map((item) => <option key={item}>{item}</option>)}</select><span className="inline-create"><input aria-label="Tên nhóm hàng mới" placeholder="Tạo nhóm hàng mới" value={newCategory} onChange={(event) => setNewCategory(event.target.value)} /><button type="button" className="button button-secondary" onClick={addCategory}>Tạo nhóm</button></span></label>
+      <label className="form-label">Nhóm hàng<select name="category" value={selectedCategory} onChange={(event) => { if (event.target.value === '__create__') setNewCategory('__open__'); else setSelectedCategory(event.target.value) }}><option value="" disabled>Chọn nhóm hàng</option>{categories.map((item) => <option key={item}>{item}</option>)}<option value="__create__">＋ Tạo nhóm hàng mới</option></select>{newCategory !== '' && <span className="inline-create"><input aria-label="Tên nhóm hàng mới" placeholder="Tên nhóm hàng" value={newCategory === '__open__' ? '' : newCategory} onChange={(event) => setNewCategory(event.target.value)} /><button type="button" className="button button-secondary" onClick={addCategory}>Thêm nhóm</button></span>}</label>
       <label className="form-label">Loại hàng<select value={productType} onChange={(event) => setProductType(event.target.value)}><option>Hàng hóa thường</option><option>Chế biến</option></select></label>
       <label className="form-label">Loại thực đơn<select name="menuType" defaultValue={String(initial?.menuType ?? 'Đồ uống')}><option>Đồ uống</option><option>Đồ ăn</option><option>Khác</option></select></label>
       <label className="form-label">Giá bán (₫)<input name="price" type="number" min="0" required defaultValue={String(initial?.price ?? '')} /></label>
@@ -255,9 +316,9 @@ function ProductEditor({ initial, nextProductCode, onCancel, onSave }: { initial
       <label className="form-label">Trạng thái<select name="status" defaultValue={String(initial?.status ?? 'Đang bán')}><option>Đang bán</option><option>Tạm hết</option></select></label>
     </div>
     <div className="product-checks"><label><input name="visible" type="checkbox" defaultChecked={initial?.visible !== false} /> Hiển thị trong thực đơn</label><label><input name="extra" type="checkbox" defaultChecked={initial?.extra === true} /> Là món thêm</label><label><input name="points" type="checkbox" defaultChecked={initial?.points !== false} /> Tích điểm</label></div>
-    <label className="form-label product-image-field">Hình ảnh sản phẩm<input type="file" accept="image/*" onChange={onImageChange} /><small>{compressing ? 'Đang nén ảnh...' : 'Ảnh được thu nhỏ tối đa 600px và nén trước khi lưu trên thiết bị.'}</small>{image && <img src={image} alt="Xem trước sản phẩm" />}</label>
+    <label className="form-label product-image-field">Hình ảnh sản phẩm<input type="file" accept="image/*" onChange={onImageChange} /><small>{compressing ? 'Đang nén ảnh...' : 'Ảnh được thu nhỏ tối đa 600px và nén trước khi lưu trên thiết bị.'}</small>{image && <span className="product-image-preview"><img src={image} alt="Xem trước sản phẩm" /><button className="button button-secondary" type="button" onClick={() => setImage('')}>Xóa ảnh</button></span>}</label>
     <section className="product-extra-editor"><div><strong>Thuộc tính</strong><button className="button button-secondary" type="button" onClick={() => setAttributes((current) => [...current, { name: '', value: '' }])}>+ Thêm thuộc tính</button></div>{attributes.map((entry, index) => <div className="inline-edit-row" key={`attr-${index}`}><input aria-label="Tên thuộc tính" placeholder="Ví dụ: Size" value={entry.name} onChange={(event) => setAttributes((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item))} /><input aria-label="Giá trị thuộc tính" placeholder="Ví dụ: M, L, XL" value={entry.value} onChange={(event) => setAttributes((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, value: event.target.value } : item))} /><button type="button" aria-label="Xóa thuộc tính" onClick={() => setAttributes((current) => current.filter((_, itemIndex) => itemIndex !== index))}>×</button></div>)}</section>
-    <section className="product-extra-editor"><div><strong>Đơn vị tính</strong><span>Đơn vị cơ bản: 1 sản phẩm</span><button className="button button-secondary" type="button" onClick={() => setUnits((current) => [...current, { name: '', ratio: 1 }])}>+ Thêm đơn vị</button></div>{units.map((unit, index) => <div className="inline-edit-row" key={`unit-${index}`}><input aria-label="Tên đơn vị" placeholder="Ví dụ: Thùng" value={unit.name} onChange={(event) => setUnits((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item))} /><input aria-label="Số đơn vị cơ bản" type="number" min="1" value={unit.ratio} onChange={(event) => setUnits((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, ratio: Number(event.target.value) } : item))} /><span>= đơn vị cơ bản</span><button type="button" aria-label="Xóa đơn vị" onClick={() => setUnits((current) => current.filter((_, itemIndex) => itemIndex !== index))}>×</button></div>)}</section>
+    <section className="product-extra-editor"><div><strong>Đơn vị tính</strong><span>Đơn vị cơ bản: 1 sản phẩm</span><button className="button button-secondary" type="button" onClick={() => setUnits((current) => [...current, { name: '', ratio: 1, cost: Number(initial?.cost ?? 0), price: Number(initial?.price ?? 0) }])}>+ Thêm đơn vị</button></div>{units.map((unit, index) => <div className="unit-editor-row" key={`unit-${index}`}><input aria-label="Tên đơn vị" placeholder="Ví dụ: Thùng" value={unit.name} onChange={(event) => setUnits((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item))} /><label>Quy đổi<input aria-label="Số đơn vị cơ bản" type="number" min="1" value={unit.ratio} onChange={(event) => setUnits((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, ratio: Number(event.target.value) } : item))} /></label><label>Giá bán<input aria-label="Giá bán đơn vị" type="number" min="0" value={unit.price} onChange={(event) => setUnits((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, price: Number(event.target.value) } : item))} /></label><label>Giá vốn<input aria-label="Giá vốn đơn vị" type="number" min="0" disabled={productType === 'Chế biến'} value={unit.cost} onChange={(event) => setUnits((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, cost: Number(event.target.value) } : item))} /></label><button type="button" aria-label="Xóa đơn vị" onClick={() => setUnits((current) => current.filter((_, itemIndex) => itemIndex !== index))}>×</button><small>Sẽ tạo đơn vị con “{String(initial?.name ?? 'Tên hàng')} · {unit.name || 'Đơn vị mới'}”</small></div>)}</section>
     {error && <p className="form-error" role="alert">{error}</p>}<div className="modal-actions"><button className="button button-secondary" type="button" onClick={onCancel}>Hủy</button><button className="button button-primary" type="submit">Lưu món</button></div>
   </form>
 }

@@ -33,7 +33,6 @@ export function ManagementLayout() {
         {navigationGroups.slice(0, 5).map(({ label, icon: Icon, items }) => <NavigationGroup key={label} label={label} icon={Icon} items={items} active={activeGroup === label} />)}
         <NavigationGroup label="Nhân viên" icon={UserRoundCog} items={navigationGroups[5].items} active={activeGroup === 'Nhân viên'} />
         <NavLink to="/management/cashbook" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}><Wallet size={18} strokeWidth={1.8} /><span>Sổ quỹ</span></NavLink>
-        <NavLink to="/management/bank-accounts" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}><Wallet size={18} strokeWidth={1.8} /><span>Tài khoản ngân hàng</span></NavLink>
         <NavigationGroup label="Báo cáo" icon={BarChart3} items={navigationGroups[6].items} active={activeGroup === 'Báo cáo'} />
       </nav>
       <div className="sidebar-bottom"><div className="user-card"><div className="avatar">CH</div><div><strong>Chí Hồ</strong><small>Quản lý cửa hàng</small></div><ChevronDown size={15} /></div></div>
@@ -45,7 +44,7 @@ export function ManagementLayout() {
       <NavLink to="/management/inventory" className={({ isActive }) => `mobile-tab ${isActive || location.pathname.includes('stock-check') ? 'active' : ''}`}><Boxes size={19} /><span>Kho</span></NavLink>
       <button type="button" className={`mobile-tab ${moreOpen ? 'active' : ''}`} aria-expanded={moreOpen} onClick={() => setMoreOpen((open) => !open)}><MoreHorizontal size={19} /><span>Thêm</span></button>
     </nav>
-    {moreOpen && <div className="mobile-more-menu"><strong>Quản lý cửa hàng</strong>{navigationGroups.flatMap((group) => group.items.map((item) => <NavLink key={item.to} to={item.to} onClick={() => setMoreOpen(false)}>{item.label}</NavLink>))}<NavLink to="/management/cashbook" onClick={() => setMoreOpen(false)}>Sổ quỹ</NavLink><NavLink to="/management/bank-accounts" onClick={() => setMoreOpen(false)}>Tài khoản ngân hàng</NavLink><NavLink to="/pos" onClick={() => setMoreOpen(false)}>Mở POS</NavLink><button type="button" onClick={() => setMoreOpen(false)}><X size={15} /> Đóng menu</button></div>}
+    {moreOpen && <div className="mobile-more-menu"><strong>Quản lý cửa hàng</strong>{navigationGroups.flatMap((group) => group.items.map((item) => <NavLink key={item.to} to={item.to} onClick={() => setMoreOpen(false)}>{item.label}</NavLink>))}<NavLink to="/management/cashbook" onClick={() => setMoreOpen(false)}>Sổ quỹ</NavLink><NavLink to="/pos" onClick={() => setMoreOpen(false)}>Mở POS</NavLink><button type="button" onClick={() => setMoreOpen(false)}><X size={15} /> Đóng menu</button></div>}
 
     <main className="management-main">
       <header className="topbar"><div className="topbar-heading"><span className="breadcrumb">Quản lý cửa hàng</span><strong>{title}</strong></div><div className="topbar-actions"><NavLink to="/pos" className="pos-shortcut"><CreditCard size={16} /> Mở POS</NavLink><span className="online-pill"><i /> Online</span><button className="icon-button" type="button" aria-label="Thông báo"><Bell size={18} /><i className="notification-dot" /></button><button className="branch-selector" type="button"><span className="branch-avatar">M</span><span><small>Chi nhánh</small><strong>Mộc Store · Quận 1</strong></span><ChevronDown size={15} /></button></div></header>

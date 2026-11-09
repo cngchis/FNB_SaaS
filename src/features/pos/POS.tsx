@@ -19,9 +19,13 @@ function loadCatalogProducts(): Product[] {
       .map((item, index) => {
         const category = String(item.category ?? 'Khác')
         const code = String(item.code ?? `M${String(index + 1).padStart(5, '0')}`)
-        return { id: code, sku: code, name: String(item.name ?? 'Sản phẩm'), category, price: Number(item.price) || 0, stock: Number(item.stock) || 0, minimum: Number(item.minimum) || 0, color: categoryColors[category] ?? '#edf2ee', image: typeof item.image === 'string' ? item.image : undefined }
+        return { id: code, sku: code, name: String(item.name ?? 'Sản phẩm'), category, price: Number(item.price) || 0, stock: Number(item.stock) || 0, minimum: Number(item.minimum) || 0, color: categoryColors[category] ?? '#edf2ee', image: typeof item.image === 'string' ? item.image : undefined, productType: String(item.productType ?? 'Chế biến') as Product['productType'], attributes: parseCatalogRows(item.attributes), units: parseCatalogRows(item.units) }
       })
   } catch { return products }
+}
+
+function parseCatalogRows<T>(value: unknown): T[] {
+  try { const result: unknown = typeof value === 'string' ? JSON.parse(value) : value; return Array.isArray(result) ? result as T[] : [] } catch { return [] }
 }
 
 export function POS() {
@@ -113,7 +117,7 @@ export function POS() {
 
       <aside className={`cart-panel ${cartExpanded ? 'expanded' : ''}`}>
         <div className="mobile-cart-handle" />
-        <div className="cart-header"><button className="cart-title-button" type="button" onClick={() => setCartExpanded((expanded) => !expanded)} aria-expanded={cartExpanded}><div><h2 className="cart-title-desktop">Đơn hàng hiện tại</h2><h2 className="cart-title-mobile">Đơn hiện tại · {items.reduce((totalCount, item) => totalCount + item.quantity, 0)} món</h2><p className="cart-count-desktop">{items.reduce((totalCount, item) => totalCount + item.quantity, 0)} sản phẩm</p><p className="cart-items-mobile">{items.map(({ product, quantity }) => `${product.name} ×${quantity}`).join('  ·  ') || 'Chọn sản phẩm để bắt đầu'}</p></div><ChevronDown size={17} className="mobile-cart-chevron" /></button><button className="cart-clear" type="button" onClick={clear} disabled={items.length === 0}><Trash2 size={16} /> Xóa</button></div>
+        <div className="cart-header"><button className="cart-title-button" type="button" onClick={() => setCartExpanded((expanded) => !expanded)} aria-expanded={cartExpanded}><div><h2 className="cart-title-desktop">{orderCode}: {table}</h2><h2 className="cart-title-mobile">{orderCode}: {table}</h2><p className="cart-count-desktop">{items.reduce((totalCount, item) => totalCount + item.quantity, 0)} sản phẩm</p><p className="cart-items-mobile">{items.map(({ product, quantity }) => `${product.name} ×${quantity}`).join('  ·  ') || 'Chọn sản phẩm để bắt đầu'}</p></div><ChevronDown size={17} className="mobile-cart-chevron" /></button><button className="cart-clear" type="button" onClick={clear} disabled={items.length === 0}><Trash2 size={16} /> Xóa</button></div>
         <div className="mobile-cart-summary"><div><span>Tổng thanh toán</span><strong>{formatCurrency(total)}</strong></div><button type="button" disabled={!items.length} onClick={() => setPaymentOptionsOpen(true)}>Thanh toán</button></div>
         <div className="order-type"><span className="order-type-icon"><ShoppingBag size={15} /></span><span>Đơn hàng {orderCode}</span><span className="order-type-mode">Bán tại quầy</span></div>
         <div className="cart-metadata"><label>Khách hàng<input list="pos-customer-list" value={customer} onChange={(event) => setCustomer(event.target.value)} /><datalist id="pos-customer-list">{customers.map((item) => <option key={item} value={item} />)}</datalist></label><label>Phòng / bàn<select value={table} onChange={(event) => setTable(event.target.value)}>{rooms.map((room) => <option key={room}>{room}</option>)}</select></label></div>
@@ -157,17 +161,31 @@ function PaymentOptions({ onClose, onSelect }: { onClose: () => void; onSelect: 
 }
 
 function OrdersDialog({ onClose }: { onClose: () => void }) {
+  const [selected, setSelected] = useState<(typeof recentOrders)[number] | null>(null)
   return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><section className="modal-card orders-dialog" role="dialog" aria-modal="true" aria-labelledby="recent-orders-title">
     <button className="modal-close" type="button" aria-label="Đóng" onClick={onClose}><X size={18} /></button><span className="modal-icon"><Clock3 size={19} /></span><h2 id="recent-orders-title">Đơn hàng gần đây</h2><p>Các đơn gần nhất trong dữ liệu demo.</p>
-    <div className="recent-order-list">{recentOrders.map((order) => <div className="recent-order-row" key={order.code}><div><strong>#{order.code}</strong><span>{order.time} · {order.method}</span></div><strong>{formatCurrency(order.amount)}</strong></div>)}</div>
+    <div className="recent-order-list">{recentOrders.map((order) => <button className="recent-order-row" key={order.code} type="button" onClick={() => setSelected(order)}><div><strong>#{order.code}</strong><span>{order.time} · {order.method}</span></div><strong>{formatCurrency(order.amount)}</strong></button>)}</div>
+    {selected && <div className="invoice-detail-panel"><div><strong>Hóa đơn #{selected.code}</strong><button type="button" aria-label="Đóng chi tiết hóa đơn" onClick={() => setSelected(null)}><X size={15} /></button></div><p><span>Thời gian</span><strong>{selected.time}</strong></p><p><span>Phương thức</span><strong>{selected.method}</strong></p><p><span>Khách cần trả</span><strong>{formatCurrency(selected.amount)}</strong></p><p><span>Trạng thái</span><strong>Đã thanh toán</strong></p></div>}
     <small className="receipt-demo-note">Chưa có kết nối API lịch sử đơn hàng.</small>
   </section></div>
 }
 
 function ProductCard({ product, onAdd }: { product: Product; onAdd: (product: Product) => void }) {
-  return <button className="product-card" type="button" onClick={() => onAdd(product)} aria-label={`Thêm ${product.name} vào đơn hàng`}>
-    <ProductArtwork product={product} /><div className="product-card-info"><strong>{product.name}</strong><span>{formatCurrency(product.price)}</span></div><span className="product-add"><Plus size={16} /></span>
-  </button>
+  const [optionsOpen, setOptionsOpen] = useState(false)
+  const attributeOptions = (product.attributes ?? []).flatMap((attribute) => attribute.value.split(',').map((value) => ({ name: attribute.name, value: value.trim() })).filter((option) => option.value))
+  const hasOptions = attributeOptions.length > 0 || (product.units?.length ?? 0) > 0
+  const selectOptions = (attributeValue?: { name: string; value: string }, unit?: NonNullable<Product['units']>[number]) => {
+    const suffix = [attributeValue && `${attributeValue.name} ${attributeValue.value}`, unit?.name].filter(Boolean).join(' · ')
+    const price = unit ? (Number(unit.price) > 0 ? Number(unit.price) : product.price * unit.ratio) : product.price
+    onAdd({ ...product, id: `${product.id}:${suffix || 'base'}`, name: suffix ? `${product.name} · ${suffix}` : product.name, sku: product.sku, price })
+    setOptionsOpen(false)
+  }
+  return <>
+    <button className="product-card" type="button" onClick={() => hasOptions ? setOptionsOpen(true) : onAdd(product)} aria-label={`Thêm ${product.name} vào đơn hàng`}>
+      <ProductArtwork product={product} /><div className="product-card-info"><strong>{product.name}</strong><span>{formatCurrency(product.price)}</span></div><span className="product-add"><Plus size={16} /></span>
+    </button>
+    {optionsOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setOptionsOpen(false) }}><section className="modal-card product-options-dialog" role="dialog" aria-modal="true" aria-label={`Tùy chọn ${product.name}`}><button className="modal-close" type="button" aria-label="Đóng" onClick={() => setOptionsOpen(false)}><X size={18} /></button><h2>{product.name}</h2><p>Chọn thuộc tính hoặc đơn vị tính</p>{attributeOptions.map((option) => <button className="product-option-button" key={`${option.name}-${option.value}`} type="button" onClick={() => selectOptions(option)}>{option.name} {option.value}<strong>{formatCurrency(product.price)}</strong></button>)}{(product.units ?? []).map((unit) => <button className="product-option-button" key={unit.name} type="button" onClick={() => selectOptions(undefined, unit)}>{unit.name} <small>{unit.ratio} đơn vị cơ bản</small><strong>{formatCurrency(Number(unit.price) > 0 ? Number(unit.price) : product.price * unit.ratio)}</strong></button>)}<button className="button button-secondary" type="button" onClick={() => selectOptions()}>Đơn vị cơ bản · {formatCurrency(product.price)}</button></section></div>}
+  </>
 }
 
 function CartItem({ product, quantity, onChange, onRemove }: { product: Product; quantity: number; onChange: (id: string, quantity: number) => void; onRemove: (id: string) => void }) {
