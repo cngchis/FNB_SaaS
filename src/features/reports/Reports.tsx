@@ -15,6 +15,27 @@ type ReportDefinition = {
   rows: ReportRow[]
 }
 
+type GoodsMetric = 'quantity' | 'revenue' | 'profit' | 'stockValue' | 'stockQuantity'
+const goodsMetrics = [
+  { name: 'Cà phê sữa', quantity: 486, revenue: 36_296_400, profit: 17_422_272, stockValue: 8_740_000, stockQuantity: 46 },
+  { name: 'Trà đào cam sả', quantity: 412, revenue: 26_790_200, profit: 12_055_590, stockValue: 4_160_000, stockQuantity: 32 },
+  { name: 'Bạc xỉu', quantity: 328, revenue: 15_555_600, profit: 7_777_800, stockValue: 2_880_000, stockQuantity: 24 },
+  { name: 'Croissant', quantity: 196, revenue: 7_777_800, profit: 3_111_120, stockValue: 720_000, stockQuantity: 12 },
+]
+
+function ProductMetricChart({ title, metric, onMetricChange, options }: { title: string; metric: GoodsMetric; onMetricChange: (metric: GoodsMetric) => void; options: { value: GoodsMetric; label: string }[] }) {
+  const values = goodsMetrics.map((item) => item[metric])
+  const maxValue = Math.max(...values, 1)
+  return <section className="report-product-chart">
+    <div className="report-product-chart-header"><h3>{title}</h3><select aria-label={`Lọc ${title.toLocaleLowerCase('vi')}`} value={metric} onChange={(event) => onMetricChange(event.target.value as GoodsMetric)}>{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div>
+    <div className="report-product-bars">{goodsMetrics.map((item) => <div className="report-product-bar" key={item.name} title={`${item.name}: ${metric === 'stockQuantity' || metric === 'quantity' ? item[metric] : formatCurrency(item[metric])}`}><div><i style={{ height: `${Math.max(5, item[metric] / maxValue * 100)}%` }} /></div><strong>{metric === 'stockQuantity' || metric === 'quantity' ? item[metric] : formatCurrency(item[metric])}</strong><span>{item.name}</span></div>)}</div>
+  </section>
+}
+
+function linePoints(values: number[], max: number) {
+  return values.map((value, index) => `${(index / (values.length - 1)) * 100},${100 - (value / max) * 100}`).join(' ')
+}
+
 const definitions: Record<ReportId, ReportDefinition> = {
   'end-of-day': {
     title: 'Báo cáo cuối ngày', description: 'Đối soát doanh thu, phương thức thanh toán và tiền quỹ trong ngày.', chartTitle: 'Tổng kết giao dịch hôm nay',
@@ -49,7 +70,12 @@ export function Reports({ reportId }: { reportId: ReportId }) {
   const [closeDialog, setCloseDialog] = useState(false)
   const [closed, setClosed] = useState(false)
   const [notice, setNotice] = useState('')
+  const [bestSellerMetric, setBestSellerMetric] = useState<GoodsMetric>('quantity')
+  const [inventoryMetric, setInventoryMetric] = useState<GoodsMetric>('stockValue')
   const reportTotal = reportId === 'goods' ? '248 SKU' : reportId === 'finance' ? '36.848.800 ₫' : reportId === 'sales' ? '86.420.000 ₫' : '12.850.000 ₫'
+  const costSeries = [25, 30, 27, 43, 39, 48, 47, 58, 56, 51, 66, 62]
+  const profitSeries = report.values.map((value, index) => Math.max(8, value - costSeries[index]))
+  const lineMax = Math.max(...report.values, ...costSeries, ...profitSeries)
   const cashDifference = (Number(chestAmount) || 0) - 7967000
 
   const exportCsv = () => {
@@ -74,7 +100,15 @@ export function Reports({ reportId }: { reportId: ReportId }) {
     <div className="page-title-row"><div><div className="record-breadcrumb">Báo cáo <span>/</span> {report.title}</div><h1>{report.title}</h1><p>{report.description}</p></div><div className="report-actions"><label className="report-period"><CalendarDays size={15} /><select value={period} onChange={(event) => setPeriod(event.target.value)}><option>Hôm nay</option><option>7 ngày qua</option><option>Tháng này</option><option>Tháng trước</option></select></label><button className="button button-secondary" type="button" onClick={exportCsv}><Download size={15} /> Xuất báo cáo</button>{reportId === 'end-of-day' && <button className="button button-primary" type="button" disabled={closed} onClick={() => setCloseDialog(true)}><Check size={15} /> {closed ? 'Đã chốt ca' : 'Chốt ca'}</button>}</div></div>
     {reportId === 'end-of-day' && <div className="report-shift-banner"><div className="report-shift-icon"><Wallet size={18} /></div><div><strong>{closed ? 'Ca đã được đối soát' : 'Ca sáng · 07:00 – 15:00'}</strong><span>{closed ? 'Số liệu được lưu trong bản demo cục bộ.' : 'Nhân viên: Trần Thu Hà · Mở ca lúc 07:02'}</span></div><b>{closed ? 'Đã chốt' : 'Đang mở'}</b></div>}
     <div className="report-metrics">{report.metrics.map((metric) => <article className="report-metric" key={metric.label}><span>{metric.label}</span><strong>{metric.value}</strong><small className={metric.direction === 'down' ? 'negative' : metric.direction === 'up' ? 'positive' : ''}>{metric.direction === 'down' ? <ArrowDownRight size={12} /> : metric.direction === 'up' ? <ArrowUpRight size={12} /> : null}{metric.detail}</small></article>)}</div>
-    <div className="report-layout"><article className="panel report-chart-panel"><div className="panel-header"><div><h2>{report.chartTitle}</h2><p>{period} · Mộc Store, Quận 1</p></div><div className="report-chart-legend"><i />{reportId === 'goods' ? 'Số lượng xuất' : reportId === 'finance' ? 'Thu vào' : 'Doanh thu'}</div></div><div className="report-chart"><div className="report-chart-scale"><span>100%</span><span>75%</span><span>50%</span><span>25%</span><span>0</span></div><div className="report-chart-area">{[0, 1, 2, 3, 4].map((value) => <i className="report-grid-line" key={value} style={{ top: `${value * 25}%` }} />)}<div className="report-bars">{report.values.map((value, index) => <div className={`report-bar ${index === report.values.length - 3 ? 'highlight' : ''}`} key={index} title={`${report.periods[index] ?? ''}: ${value}%`}><i style={{ height: `${value}%` }} /><span>{report.periods[index]}</span></div>)}</div></div></div></article>
+    <div className="report-layout"><article className={`panel report-chart-panel ${reportId === 'goods' ? 'report-goods-chart-panel' : ''}`}>
+      {reportId === 'goods' ? <>
+        <div className="panel-header"><div><h2>Hiệu quả hàng hóa</h2><p>{period} · Mộc Store, Quận 1</p></div></div>
+        <div className="goods-charts-stack"><ProductMetricChart title="Hàng bán chạy" metric={bestSellerMetric} onMetricChange={setBestSellerMetric} options={[{ value: 'quantity', label: 'Theo số lượng bán' }, { value: 'revenue', label: 'Theo doanh thu' }, { value: 'profit', label: 'Theo lợi nhuận' }]} /><ProductMetricChart title="Hàng tồn kho" metric={inventoryMetric} onMetricChange={setInventoryMetric} options={[{ value: 'stockValue', label: 'Theo giá trị kho' }, { value: 'stockQuantity', label: 'Theo số lượng tồn' }]} /></div>
+      </> : <>
+        <div className="panel-header"><div><h2>{report.chartTitle}</h2><p>{period} · Mộc Store, Quận 1</p></div>{reportId === 'sales' ? <div className="report-line-legend"><span><i className="line-key profit" />Lợi nhuận</span><span><i className="line-key revenue" />Doanh thu</span><span><i className="line-key cost" />Giá vốn</span></div> : <div className="report-chart-legend"><i />{reportId === 'finance' ? 'Thu vào' : 'Giao dịch'}</div>}</div>
+        <div className="report-chart"><div className="report-chart-scale"><span>100%</span><span>75%</span><span>50%</span><span>25%</span><span>0</span></div><div className={`report-chart-area ${reportId === 'sales' ? 'report-line-area' : ''}`}>{[0, 1, 2, 3, 4].map((value) => <i className="report-grid-line" key={value} style={{ top: `${value * 25}%` }} />)}{reportId === 'sales' ? <><svg className="report-line-chart" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="Lợi nhuận, doanh thu và giá vốn theo ngày"><polyline className="line-profit" points={linePoints(profitSeries, lineMax)} /><polyline className="line-revenue" points={linePoints(report.values, lineMax)} /><polyline className="line-cost" points={linePoints(costSeries, lineMax)} /></svg><div className="report-line-labels">{report.periods.map((label) => <span key={label}>{label}</span>)}</div></> : <div className="report-bars">{report.values.map((value, index) => <div className="report-bar" key={index} title={`${report.periods[index] ?? ''}: ${value}%`}><i style={{ height: `${value}%` }} /><span>{report.periods[index]}</span></div>)}</div>}</div></div>
+      </>}
+    </article>
       <article className="panel report-breakdown"><div className="panel-header"><div><h2>{reportId === 'goods' ? 'Tình trạng tồn kho' : reportId === 'finance' ? 'Cơ cấu tài chính' : 'Tổng quan kỳ báo cáo'}</h2><p>Số liệu đã tổng hợp</p></div></div><div className="report-total"><strong>{reportTotal}</strong><span>{reportId === 'goods' ? 'Tổng sản phẩm đang quản lý' : reportId === 'finance' ? 'Lợi nhuận gộp trong kỳ' : 'Tổng giá trị ghi nhận'}</span></div>{report.rows.slice(0, 3).map((row, index) => <div className="report-breakdown-row" key={row.label}><span className={`legend-dot legend-${index}`} /><span>{row.label}</span><strong>{row.value}</strong></div>)}</article>
     </div>
     <article className="panel report-detail-panel"><div className="panel-header"><div><h2>{reportId === 'goods' ? 'Tồn kho cần chú ý' : reportId === 'finance' ? 'Chi tiết thu chi' : 'Chi tiết theo khoản mục'}</h2><p>{report.rows.length} khoản mục trong {period.toLocaleLowerCase('vi')}</p></div><span className="report-updated">Cập nhật vừa xong</span></div><div className="table-scroll"><table className="data-table report-table"><thead><tr>{report.columns.map((column) => <th key={column}>{column}</th>)}</tr></thead><tbody>{report.rows.map((row) => <tr key={row.label}><td><strong>{row.label}</strong><small>{row.detail}</small></td><td>{row.tone === 'negative' ? (reportId === 'goods' ? <span className="status-badge low"><i />Sắp hết</span> : 'Chi phí / hoàn tiền') : reportId === 'goods' ? 'Đang kinh doanh' : reportId === 'finance' ? 'Thu vào' : row.detail}</td><td className={`report-value ${row.tone ?? ''}`}>{row.value}</td></tr>)}</tbody></table></div></article>
