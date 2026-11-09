@@ -10,7 +10,7 @@ export function Inventory({ stockCheck = false }: InventoryProps) {
   const catalog = useMemo(() => {
     try {
       const saved: unknown = JSON.parse(localStorage.getItem('fnb-management:menu-items') ?? 'null')
-      if (Array.isArray(saved)) return saved.filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null && item.productType === 'Hàng hóa thường').map((item, index) => ({ id: String(item.code ?? index), sku: String(item.code ?? `M${index}`), name: String(item.name ?? 'Hàng hóa'), category: String(item.category ?? 'Khác'), price: Number(item.price ?? 0), stock: Number(item.stock ?? 0), minimum: Number(item.minimum ?? 0), color: '#e5e9e4', image: String(item.image ?? '') }))
+      if (Array.isArray(saved)) return saved.filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null && item.productType === 'Hàng hóa thường').map((item, index) => ({ id: String(item.code ?? index), sku: String(item.code ?? `M${index}`), name: String(item.name ?? 'Hàng hóa'), category: String(item.category ?? 'Khác'), price: Number(item.price ?? 0), stock: Number(item.stock ?? 0), minimum: Number(item.minimum ?? 0), color: '#e8edf5', image: String(item.image ?? '') }))
     } catch { /* use bundled inventory data */ }
     return products.filter((product) => ['retail-01'].includes(product.id))
   }, [])

@@ -6,7 +6,7 @@ export const products: Product[] = [
   { id: 'coffee-02', name: 'Cà phê đen', sku: 'CF-002', category: 'Cà phê', price: 39000, stock: 25, minimum: 8, color: '#e8ddd2' },
   { id: 'coffee-03', name: 'Bạc xỉu', sku: 'CF-003', category: 'Cà phê', price: 45000, stock: 18, minimum: 6, color: '#efe1d1' },
   { id: 'cake-01', name: 'Croissant', sku: 'BK-001', category: 'Bánh', price: 28000, stock: 12, minimum: 5, color: '#f5e4c7' },
-  { id: 'retail-01', name: 'Ly giữ nhiệt', sku: 'RT-001', category: 'Retail SKU', price: 120000, stock: 4, minimum: 6, color: '#e5e9e4' },
+  { id: 'retail-01', name: 'Ly giữ nhiệt', sku: 'RT-001', category: 'Retail SKU', price: 120000, stock: 4, minimum: 6, color: '#e8edf5' },
   { id: 'tea-02', name: 'Trà sữa', sku: 'TR-006', category: 'Trà', price: 30000, stock: 27, minimum: 8, color: '#ede2d6' },
   { id: 'cake-02', name: 'Bánh tiramisu', sku: 'BK-008', category: 'Bánh', price: 55000, stock: 9, minimum: 4, color: '#eadbd3' },
 ]

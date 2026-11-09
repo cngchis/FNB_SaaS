@@ -8,7 +8,7 @@ import type { Product } from '../../types'
 import { ProductArtwork } from '../../components/ProductArtwork'
 import { managementModules, type ManagementRow } from '../management/moduleConfig'
 
-const categoryColors: Record<string, string> = { 'Cà phê': '#f2e5d6', 'Trà': '#f7e1d7', 'Đồ ăn': '#f5e4c7', 'Retail SKU': '#e5e9e4', 'Bia': '#e8ecd4', 'Cacao': '#eadbd3' }
+const categoryColors: Record<string, string> = { 'Cà phê': '#f2e5d6', 'Trà': '#f7e1d7', 'Đồ ăn': '#f5e4c7', 'Retail SKU': '#e8edf5', 'Bia': '#e8ecd4', 'Cacao': '#eadbd3' }
 
 function loadCatalogProducts(): Product[] {
   try {
@@ -19,7 +19,7 @@ function loadCatalogProducts(): Product[] {
       .map((item, index) => {
         const category = String(item.category ?? 'Khác')
         const code = String(item.code ?? `M${String(index + 1).padStart(5, '0')}`)
-        return { id: code, sku: code, name: String(item.name ?? 'Sản phẩm'), category, price: Number(item.price) || 0, stock: Number(item.stock) || 0, minimum: Number(item.minimum) || 0, color: categoryColors[category] ?? '#edf2ee', image: typeof item.image === 'string' ? item.image : undefined, baseUnit: String(item.baseUnit ?? 'Cái'), productType: String(item.productType ?? 'Chế biến') as Product['productType'], attributes: parseCatalogRows(item.attributes), units: parseCatalogRows(item.units) }
+        return { id: code, sku: code, name: String(item.name ?? 'Sản phẩm'), category, price: Number(item.price) || 0, stock: Number(item.stock) || 0, minimum: Number(item.minimum) || 0, color: categoryColors[category] ?? '#eef2f7', image: typeof item.image === 'string' ? item.image : undefined, baseUnit: String(item.baseUnit ?? 'Cái'), productType: String(item.productType ?? 'Chế biến') as Product['productType'], attributes: parseCatalogRows(item.attributes), units: parseCatalogRows(item.units) }
       })
   } catch { return products }
 }
