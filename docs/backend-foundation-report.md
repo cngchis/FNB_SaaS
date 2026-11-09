@@ -60,12 +60,13 @@ Use distinct owner/runtime database passwords and URL-encode reserved characters
 | Go tests | Passed: `go test ./...`; PostgreSQL RLS integration test skipped because test database URLs are not configured |
 | Go build | Passed: `go build ./...` |
 | PostgreSQL migration / RLS integration test | User confirmed migration, bootstrap, readiness, login, and a PASS result for the RLS test on local database `fnb_saas`; credentials are not available to the agent |
-| Full authentication lifecycle | Integration test added; live execution still requires account credentials and the running API |
+| Full authentication lifecycle | User confirmed PASS for the login/refresh/logout lifecycle integration test |
+| Migration rollback/reapply | New temporary-database integration test compiles; live run pending. Down migration now drops the user membership policy before its referenced table |
 | SQLC generation | Passed: generated with SQLC v1.29.0; initial auth lookups use generated query methods |
 | Compose validation/startup | Not run: Docker was not used; native local PostgreSQL is the requested workflow |
 | Frontend visual checks | Not applicable to this backend-only change; no frontend/CSS files were edited |
 
-The API has compiled. Local migration, bootstrap, basic login, and cross-tenant isolation have been confirmed by the user. The complete authentication lifecycle test still needs a live run; this report distinguishes user-confirmed results from agent-executed checks.
+The API has compiled. Local migration, bootstrap, cross-tenant isolation, and the authentication lifecycle integration test have been confirmed by the user. Migration rollback/reapply still needs a live run in the temporary-database test. This report distinguishes user-confirmed results from agent-executed checks.
 
 ## Out of scope / follow-up
 
@@ -73,4 +74,4 @@ The API has compiled. Local migration, bootstrap, basic login, and cross-tenant 
 - Product/customer repository endpoints and frontend API wiring.
 - Granular permission enforcement, membership management, and multi-store switching within an active session.
 - Extending SQLC-generated query usage to session and business module repositories.
-- CI execution and the full authentication lifecycle integration run.
+- CI execution and the migration rollback/reapply integration run.

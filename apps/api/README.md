@@ -22,6 +22,10 @@ Requirements for native local development: Go 1.22+, PostgreSQL 16, and goose CL
 
 The RLS test also accepts `TEST_DATABASE_ADMIN_PASSWORD` and `TEST_DATABASE_PASSWORD` as separate password overrides, so connection strings do not need to contain passwords. It creates two temporary tenants and removes their data after the test. It requires a migrated development or test database and an admin account that can bypass RLS to prepare fixtures.
 
+### Migration round-trip check
+
+Set `TEST_DATABASE_ADMIN_URL` and optionally `TEST_DATABASE_ADMIN_PASSWORD`, then run `go test -v ./internal/database -run '^TestMigrationRoundTrip$' -count=1` from `apps/api`. The account needs permission to create and drop databases. The test creates a unique temporary database from `template0`, applies migrations, rolls them back to version zero, checks that application tables are removed, and applies migrations again. Only the newly created database is migrated and deleted; the database named in the admin URL is used as the control connection.
+
 ### Authentication integration check
 
 Keep the API running, then set `AUTH_TEST_TENANT`, `AUTH_TEST_EMAIL`, and `AUTH_TEST_PASSWORD` for a provisioned account. Run `go test -v ./tests -run '^TestAuthLifecycle$' -count=1` from `apps/api`. Optionally set `AUTH_TEST_BASE_URL` (default `http://localhost:8080`). The test checks login, identity context, the role gate, refresh-token rotation, rejection of the old refresh token, logout, and rejection of tokens after logout. It revokes its own session and does not print credentials or tokens. Without credentials it skips rather than verifying a live API.
@@ -48,4 +52,4 @@ SQL query sources are in `sql/`; run `make sqlc` after changing them or the sche
 
 - Order/payment tables are schema foundations only; order creation, payment providers, idempotent checkout, and POS flows are not implemented in this phase.
 - Authentication supports one selected store per session. Authorization is currently role-based at the route middleware level; granular permission enforcement and membership administration are future work.
-- API build and Go tests pass. PostgreSQL migration and RLS integration still require database credentials configured in pgAdmin. SQLC generation has been run and integrated for the initial auth lookups.
+- Live integration checks need database/account credentials supplied through environment variables. SQLC generation is integrated for the initial auth lookups; other session queries still use pgx directly.
