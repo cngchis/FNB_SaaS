@@ -25,23 +25,23 @@ Báo cáo chi tiết về phần đã triển khai có tại [backend-foundation
 
 ## Trạng thái xác minh
 
-**Cập nhật từ người dùng:** Migration trên database mới `fnb_saas`, bootstrap owner, kết nối API, đăng nhập, test RLS và test authentication lifecycle đều đã được người dùng xác nhận thành công. Test RLS kiểm tra đọc/ghi của cả hai tenant và không coi lỗi kết nối là bằng chứng chặn ghi chéo tenant.
+**Cập nhật từ người dùng:** Migration trên database mới `fnb_saas`, bootstrap owner, kết nối API, đăng nhập, test RLS, test authentication lifecycle và test migration round-trip đều đã được người dùng xác nhận thành công. Các kiểm tra local hiện tại của foundation đã hoàn tất. Chưa triển khai API nghiệp vụ đầy đủ, frontend integration hoặc CI.
 
 Go 1.27.3 đã được nhận diện. `gofmt`, `go test ./...` và `go build ./...` đã được agent chạy thành công trước đó; các integration test cần credentials sẽ skip trong môi trường agent. SQLC v1.29.0 đã sinh code và các query tra tenant, đăng nhập, store thành viên đã dùng code sinh. Người dùng chạy PostgreSQL local và tự nhập credentials trong terminal; không lưu mật khẩu trong tài liệu/Git. Không cần Docker cho quy trình này; Compose chỉ là tùy chọn.
 
-Test vòng đời authentication nằm tại [apps/api/tests/auth_integration_test.go](../apps/api/tests/auth_integration_test.go), mặc định dùng `http://localhost:8080`. Người dùng xác nhận PASS. Test rollback mới nằm tại [apps/api/internal/database/migration_test.go](../apps/api/internal/database/migration_test.go); đã biên dịch nhưng chờ chạy live với quyền tạo database. Phần Down đã sửa để gỡ policy trên `users` trước khi xóa bảng `memberships` mà policy tham chiếu.
+Test vòng đời authentication nằm tại [apps/api/tests/auth_integration_test.go](../apps/api/tests/auth_integration_test.go), mặc định dùng `http://localhost:8080`. Test rollback nằm tại [apps/api/internal/database/migration_test.go](../apps/api/internal/database/migration_test.go), kiểm tra up → down → up trên database tạm. Cả hai đã được người dùng xác nhận PASS. Phần Down đã sửa để gỡ policy trên `users` trước khi xóa bảng `memberships` mà policy tham chiếu.
 
 ## Việc agent tiếp theo cần làm
 
-### P0 — Xác minh và sửa nền tảng hiện có
+### P0 — Tiếp tục từ foundation đã kiểm tra local
 
 1. Kiểm tra `git status` trước khi sửa để phân biệt thay đổi đã có và thay đổi của mình. Không commit hoặc push tự động.
-2. Chạy `TestMigrationRoundTrip` với `TEST_DATABASE_ADMIN_URL` và `TEST_DATABASE_ADMIN_PASSWORD`; test tự tạo/xóa database tạm để kiểm tra up → down → up.
+2. Không cần yêu cầu chạy lại các test đã PASS nếu chưa có thay đổi liên quan. Xác định module nghiệp vụ tiếp theo từ frontend hiện tại và phạm vi người dùng yêu cầu.
 3. Không bootstrap lại tenant hiện có; migration, owner và RLS đã được người dùng xác nhận. Khi cần chạy lại backend, dùng cấu hình local theo README.
 4. Không rollback database cửa hàng đang dùng. Test round-trip chỉ thao tác trên database ngẫu nhiên do chính test tạo.
 5. Khi thay đổi schema/RLS, cấu hình lại biến test DB và chạy tenant isolation test bằng runtime role `fnb_app`.
 6. Rà soát SQLC query generation và mở rộng việc dùng query code sinh cho session/refresh và các repository nghiệp vụ.
-7. Rà soát các phát hiện trong API/schema; cập nhật tài liệu phản ánh kết quả thực sự.
+7. Bổ sung CI cho build và integration tests; cập nhật tài liệu theo kết quả thực sự. Trước khi nối/refactor frontend, tạo visual baseline theo UI freeze đã được yêu cầu.
 
 ### P1 — Hoàn thiện SQLC và data access
 
