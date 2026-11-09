@@ -1,0 +1,76 @@
+services:
+  database:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: fnb_saas
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in deploy/.env}
+      FNB_APP_PASSWORD: ${FNB_APP_PASSWORD:?Set FNB_APP_PASSWORD in deploy/.env}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d fnb_saas"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    build:
+      context: ../apps/api
+    restart: "no"
+    environment:
+      MIGRATIONS_DATABASE_URL: ${MIGRATIONS_DATABASE_URL:?Set MIGRATIONS_DATABASE_URL in deploy/.env}
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["exec /goose -dir /app/migrations postgres \"$MIGRATIONS_DATABASE_URL\" up"]
+    depends_on:
+      database:
+        condition: service_healthy
+  api:
+    build:
+      context: ../apps/api
+    restart: unless-stopped
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      HTTP_ADDRESS: ":8080"
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in deploy/.env}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in deploy/.env}
+      ACCESS_TOKEN_TTL_MINUTES: ${ACCESS_TOKEN_TTL_MINUTES:-15}
+      REFRESH_TOKEN_TTL_HOURS: ${REFRESH_TOKEN_TTL_HOURS:-720}
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:5173}
+    ports:
+      - "${API_PORT:-8080}:8080"
+    depends_on:
+      database:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/readyz"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  bootstrap:
+    build:
+      context: ../apps/api
+    environment:
+      MIGRATIONS_DATABASE_URL: ${MIGRATIONS_DATABASE_URL:?Set MIGRATIONS_DATABASE_URL in deploy/.env}
+      BOOTSTRAP_TENANT_NAME: ${BOOTSTRAP_TENANT_NAME:?Set BOOTSTRAP_TENANT_NAME in deploy/.env}
+      BOOTSTRAP_TENANT_SLUG: ${BOOTSTRAP_TENANT_SLUG:?Set BOOTSTRAP_TENANT_SLUG in deploy/.env}
+      BOOTSTRAP_STORE_NAME: ${BOOTSTRAP_STORE_NAME:?Set BOOTSTRAP_STORE_NAME in deploy/.env}
+      BOOTSTRAP_STORE_SLUG: ${BOOTSTRAP_STORE_SLUG:?Set BOOTSTRAP_STORE_SLUG in deploy/.env}
+      BOOTSTRAP_OWNER_NAME: ${BOOTSTRAP_OWNER_NAME:?Set BOOTSTRAP_OWNER_NAME in deploy/.env}
+      BOOTSTRAP_OWNER_EMAIL: ${BOOTSTRAP_OWNER_EMAIL:?Set BOOTSTRAP_OWNER_EMAIL in deploy/.env}
+      BOOTSTRAP_OWNER_PASSWORD: ${BOOTSTRAP_OWNER_PASSWORD:?Set BOOTSTRAP_OWNER_PASSWORD in deploy/.env}
+    entrypoint: ["/app/bootstrap"]
+    profiles: ["tools"]
+    depends_on:
+      database:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
