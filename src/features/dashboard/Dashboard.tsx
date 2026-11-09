@@ -38,18 +38,25 @@ function formatSelectedDate(value: string) {
 
 export function Dashboard() {
   const [selectedDate, setSelectedDate] = useState(todayKey)
+  const [revenueGranularity, setRevenueGranularity] = useState<'hour' | 'day'>('hour')
   const [datePickerOpen, setDatePickerOpen] = useState(false)
   const [invoices] = useState(readInvoices)
   const dateInvoices = useMemo(() => invoices.filter((invoice) => toDateKey(invoice.date) === selectedDate), [invoices, selectedDate])
   const revenue = dateInvoices.reduce((sum, invoice) => sum + invoice.amount, 0)
   const avgOrder = dateInvoices.length ? revenue / dateInvoices.length : 0
-  const hourLabels = Array.from({ length: 12 }, (_, index) => `${index + 9}h`)
-  const hourlyAmounts = hourLabels.map((_, index) => dateInvoices.reduce((sum, invoice) => {
+  const [selectedYear, selectedMonth] = selectedDate.split('-').map(Number)
+  const monthDays = new Date(selectedYear, selectedMonth, 0).getDate()
+  const chartInvoices = revenueGranularity === 'hour' ? dateInvoices : invoices.filter((invoice) => toDateKey(invoice.date).startsWith(`${selectedYear}-${String(selectedMonth).padStart(2, '0')}`))
+  const chartLabels = revenueGranularity === 'hour' ? Array.from({ length: 12 }, (_, index) => `${index + 9}h`) : Array.from({ length: monthDays }, (_, index) => String(index + 1))
+  const chartAmounts = chartLabels.map((_, index) => chartInvoices.reduce((sum, invoice) => {
+    const dateKey = toDateKey(invoice.date)
+    if (revenueGranularity === 'day') return sum + (Number(dateKey.slice(-2)) === index + 1 ? invoice.amount : 0)
     const hour = Number(invoice.date.match(/(?:\s|T)(\d{1,2}):/)?.[1])
-    return sum + (hour === index + 9 ? invoice.amount : 0)
+    return sum + (dateKey === selectedDate && hour === index + 9 ? invoice.amount : 0)
   }, 0))
-  const peakHour = Math.max(...hourlyAmounts, 1)
-  const chartHeights = hourlyAmounts.map((amount) => amount ? Math.max(4, amount / peakHour * 100) : 0)
+  const peakAmount = Math.max(...chartAmounts, 1)
+  const chartHeights = chartAmounts.map((amount) => amount ? Math.max(4, amount / peakAmount * 100) : 0)
+  const mobileChartIndexes = revenueGranularity === 'hour' ? [0, 2, 4, 6, 8, 10, 11] : Array.from(new Set([0, Math.floor((monthDays - 1) / 5), Math.floor((monthDays - 1) * 2 / 5), Math.floor((monthDays - 1) * 3 / 5), Math.floor((monthDays - 1) * 4 / 5), monthDays - 1]))
   const cashRevenue = dateInvoices.filter((invoice) => /tiền mặt/i.test(invoice.method)).reduce((sum, invoice) => sum + invoice.amount, 0)
   const transferRevenue = dateInvoices.filter((invoice) => !/tiền mặt/i.test(invoice.method)).reduce((sum, invoice) => sum + invoice.amount, 0)
   const cashShare = revenue ? Math.round(cashRevenue / revenue * 100) : 0
@@ -72,7 +79,7 @@ export function Dashboard() {
       </section>
 
       <section className="dashboard-panels">
-        <article className="panel revenue-panel"><div className="panel-header"><div><h2>Doanh thu thuần</h2><p>Theo giờ · VND</p></div><span className="select-compact">{formatSelectedDate(selectedDate)}</span></div><div className="chart-wrap" role="img" aria-label={`Doanh thu theo giờ ngày ${formatSelectedDate(selectedDate)}`}><div className="chart-y-labels"><span>{formatCurrency(peakHour)}</span><span>{formatCurrency(peakHour * .75)}</span><span>{formatCurrency(peakHour * .5)}</span><span>{formatCurrency(peakHour * .25)}</span><span>0</span></div><div className="chart-area">{[0, 1, 2, 3, 4].map((line) => <div className="chart-grid-line" key={line} style={{ top: `${line * 25}%` }} />)}<div className="bars">{chartHeights.map((height, index) => <div key={index} className={`bar-column ${index === chartHeights.indexOf(Math.max(...chartHeights)) && hourlyAmounts[index] > 0 ? 'highlight' : ''}`} title={`${hourLabels[index]} · ${formatCurrency(hourlyAmounts[index])}`}><div style={{ height: `${height}%` }} /></div>)}</div><div className="bars bars-mobile">{[0, 2, 4, 6, 8, 10, 11].map((index, barIndex) => <div key={index} className={`bar-column ${barIndex === 5 && hourlyAmounts[index] > 0 ? 'highlight' : ''}`} title={`${hourLabels[index]} · ${formatCurrency(hourlyAmounts[index])}`}><div style={{ height: `${chartHeights[index]}%` }} /></div>)}</div><div className="chart-x-labels">{hourLabels.map((hour) => <span key={hour}>{hour}</span>)}</div><div className="chart-x-labels chart-x-labels-mobile">{[0, 2, 4, 6, 8, 10, 11].map((index) => <span key={index}>{hourLabels[index]}</span>)}</div></div></div></article>
+        <article className="panel revenue-panel"><div className="panel-header"><div><h2>Doanh thu thuần</h2><p>{revenueGranularity === 'hour' ? 'Theo giờ · VND' : `Theo ngày · ${String(selectedMonth).padStart(2, '0')}/${selectedYear}`}</p></div><div className="revenue-chart-controls"><select className="select-compact" aria-label="Nhóm doanh thu" value={revenueGranularity} onChange={(event) => setRevenueGranularity(event.target.value as 'hour' | 'day')}><option value="hour">Theo giờ</option><option value="day">Theo ngày</option></select><span className="select-compact">{revenueGranularity === 'hour' ? formatSelectedDate(selectedDate) : `${String(selectedMonth).padStart(2, '0')}/${selectedYear}`}</span></div></div><div className="chart-wrap" role="img" aria-label={`Doanh thu theo ${revenueGranularity === 'hour' ? 'giờ' : 'ngày'} · ${formatSelectedDate(selectedDate)}`}><div className="chart-y-labels"><span>{formatCurrency(peakAmount)}</span><span>{formatCurrency(peakAmount * .75)}</span><span>{formatCurrency(peakAmount * .5)}</span><span>{formatCurrency(peakAmount * .25)}</span><span>0</span></div><div className={`chart-area ${revenueGranularity === 'day' ? 'chart-area-daily' : ''}`}>{[0, 1, 2, 3, 4].map((line) => <div className="chart-grid-line" key={line} style={{ top: `${line * 25}%` }} />)}<div className="bars">{chartHeights.map((height, index) => <div key={index} className="bar-column" title={`${revenueGranularity === 'hour' ? chartLabels[index] : `Ngày ${chartLabels[index]}`} · ${formatCurrency(chartAmounts[index])}`}><div style={{ height: `${height}%` }} /></div>)}</div><div className="bars bars-mobile">{mobileChartIndexes.map((index) => <div key={index} className="bar-column" title={`${revenueGranularity === 'hour' ? chartLabels[index] : `Ngày ${chartLabels[index]}`} · ${formatCurrency(chartAmounts[index])}`}><div style={{ height: `${chartHeights[index]}%` }} /></div>)}</div><div className="chart-x-labels">{chartLabels.map((label, index) => <span key={label}>{revenueGranularity === 'hour' || index % 5 === 0 || index === chartLabels.length - 1 ? label : ''}</span>)}</div><div className="chart-x-labels chart-x-labels-mobile">{mobileChartIndexes.map((index) => <span key={index}>{chartLabels[index]}</span>)}</div></div></div></article>
         <article className="panel payment-panel"><div className="panel-header"><div><h2>Phương thức thanh toán</h2><p>Tỷ trọng doanh thu · {formatSelectedDate(selectedDate)}</p></div></div><div className="payment-summary"><div className="donut-chart" style={{ background: `conic-gradient(var(--chart-green) 0deg ${cashShare * 3.6}deg, var(--chart-red) ${cashShare * 3.6}deg 360deg)` }}><div><strong>{formatCurrency(revenue)}</strong><small>Tổng doanh thu</small></div></div></div><div className="payment-legend"><div><span className="legend-dot cash" /><span>Tiền mặt</span><strong>{cashShare}%</strong><small>{formatCurrency(cashRevenue)}</small></div><div><span className="legend-dot qr" /><span>Chuyển khoản / QR</span><strong>{100 - cashShare}%</strong><small>{formatCurrency(transferRevenue)}</small></div></div></article>
       </section>
 
