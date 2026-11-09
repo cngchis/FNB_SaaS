@@ -1,11 +1,13 @@
-export type ManagementValue = string | number
+export type ManagementValue = string | number | boolean
 export type ManagementRow = Record<string, ManagementValue>
 
 export type ManagementField = {
   key: string
   label: string
-  type?: 'text' | 'number' | 'date' | 'tel'
+  type?: 'text' | 'number' | 'date' | 'tel' | 'select' | 'checkbox' | 'textarea' | 'bank-picker' | 'multi-select'
   required?: boolean
+  options?: string[]
+  readOnly?: boolean
 }
 
 export type ManagementModule = {
@@ -25,9 +27,22 @@ export type ManagementModule = {
 export const managementModules: ManagementModule[] = [
   {
     id: 'menu-items', path: '/management/menu-items', title: 'Danh sách món', description: 'Quản lý thực đơn, giá bán và trạng thái phục vụ.', entity: 'món', searchPlaceholder: 'Tìm tên món hoặc mã món...', filters: ['Đang bán', 'Tạm hết'],
-    columns: [{ key: 'name', label: 'Tên món' }, { key: 'code', label: 'Mã món' }, { key: 'category', label: 'Danh mục' }, { key: 'price', label: 'Giá bán', type: 'currency' }, { key: 'status', label: 'Trạng thái', type: 'status' }],
-    fields: [{ key: 'name', label: 'Tên món', required: true }, { key: 'code', label: 'Mã món', required: true }, { key: 'category', label: 'Danh mục', required: true }, { key: 'price', label: 'Giá bán (₫)', type: 'number', required: true }, { key: 'status', label: 'Trạng thái', required: true }],
-    rows: [{ name: 'Cà phê sữa', code: 'CF-001', category: 'Cà phê', price: 35000, status: 'Đang bán' }, { name: 'Trà đào cam sả', code: 'TR-004', category: 'Trà', price: 42000, status: 'Đang bán' }, { name: 'Bạc xỉu', code: 'CF-003', category: 'Cà phê', price: 45000, status: 'Đang bán' }, { name: 'Trà sữa', code: 'TR-006', category: 'Trà', price: 30000, status: 'Tạm hết' }, { name: 'Croissant', code: 'BK-001', category: 'Bánh', price: 28000, status: 'Đang bán' }],
+    columns: [{ key: 'code', label: 'Mã hàng' }, { key: 'name', label: 'Tên hàng' }, { key: 'category', label: 'Nhóm hàng' }, { key: 'productType', label: 'Loại hàng' }, { key: 'menuType', label: 'Loại thực đơn' }, { key: 'price', label: 'Giá bán', type: 'currency' }, { key: 'stock', label: 'Tồn kho' }, { key: 'visible', label: 'Hiển thị' }],
+    fields: [
+      { key: 'code', label: 'Mã hàng', readOnly: true, required: true }, { key: 'name', label: 'Tên hàng', required: true },
+      { key: 'category', label: 'Nhóm hàng', type: 'select', options: ['Cà phê', 'Cacao', 'Trà', 'Bia', 'Đồ ăn', 'Khác'], required: true },
+      { key: 'productType', label: 'Loại hàng', type: 'select', options: ['Hàng hóa thường', 'Chế biến'], required: true },
+      { key: 'menuType', label: 'Loại thực đơn', type: 'select', options: ['Đồ uống', 'Đồ ăn', 'Khác'], required: true },
+      { key: 'price', label: 'Giá bán (₫)', type: 'number', required: true }, { key: 'status', label: 'Trạng thái', type: 'select', options: ['Đang bán', 'Tạm hết'], required: true },
+      { key: 'visible', label: 'Hiển thị trong thực đơn', type: 'checkbox' }, { key: 'extra', label: 'Là món thêm', type: 'checkbox' }, { key: 'points', label: 'Tích điểm', type: 'checkbox' },
+    ],
+    rows: [
+      { code: 'M00001', name: 'Cà phê sữa', category: 'Cà phê', productType: 'Chế biến', menuType: 'Đồ uống', price: 35000, status: 'Đang bán', visible: true, extra: false, points: true, image: '', attributes: '[]', units: '[]' },
+      { code: 'M00002', name: 'Trà đào cam sả', category: 'Trà', productType: 'Chế biến', menuType: 'Đồ uống', price: 42000, status: 'Đang bán', visible: true, extra: false, points: true, image: '', attributes: '[]', units: '[]' },
+      { code: 'M00003', name: 'Bia lon', category: 'Bia', productType: 'Hàng hóa thường', menuType: 'Khác', price: 22000, cost: 16000, stock: 48, status: 'Đang bán', visible: true, extra: false, points: true, image: '', attributes: '[]', units: '[{"name":"Thùng","ratio":24}]' },
+      { code: 'M00004', name: 'Bạc xỉu', category: 'Cà phê', productType: 'Chế biến', menuType: 'Đồ uống', price: 45000, status: 'Đang bán', visible: true, extra: false, points: true, image: '', attributes: '[]', units: '[]' },
+      { code: 'M00005', name: 'Croissant', category: 'Đồ ăn', productType: 'Hàng hóa thường', menuType: 'Đồ ăn', price: 28000, cost: 14000, stock: 12, status: 'Đang bán', visible: true, extra: true, points: true, image: '', attributes: '[]', units: '[]' },
+    ],
     metrics: [{ label: 'Tổng món', value: '36', hint: '12 danh mục' }, { label: 'Đang bán', value: '32', hint: 'Sẵn sàng phục vụ' }, { label: 'Tạm hết', value: '4', hint: 'Cần cập nhật' }],
   },
   {
@@ -46,9 +61,9 @@ export const managementModules: ManagementModule[] = [
   },
   {
     id: 'invoices', path: '/management/invoices', title: 'Hóa đơn', description: 'Tra cứu giao dịch và trạng thái thanh toán tại cửa hàng.', entity: 'hóa đơn', searchPlaceholder: 'Tìm mã hóa đơn hoặc khách hàng...', filters: ['Đã thanh toán', 'Chờ thanh toán', 'Đã hủy'],
-    columns: [{ key: 'code', label: 'Mã hóa đơn' }, { key: 'date', label: 'Thời gian', type: 'date' }, { key: 'customer', label: 'Khách hàng' }, { key: 'method', label: 'Thanh toán' }, { key: 'amount', label: 'Tổng tiền', type: 'currency' }, { key: 'status', label: 'Trạng thái', type: 'status' }],
-    fields: [{ key: 'code', label: 'Mã hóa đơn', required: true }, { key: 'date', label: 'Thời gian', required: true }, { key: 'customer', label: 'Khách hàng', required: true }, { key: 'method', label: 'Phương thức', required: true }, { key: 'amount', label: 'Tổng tiền (₫)', type: 'number', required: true }, { key: 'status', label: 'Trạng thái', required: true }],
-    rows: [{ code: 'MOC-0188', date: '11:03 · 05/11', customer: 'Khách lẻ', method: 'QR chuyển khoản', amount: 140000, status: 'Chờ thanh toán' }, { code: 'MOC-0186', date: '10:42 · 05/11', customer: 'Khách lẻ', method: 'QR chuyển khoản', amount: 245000, status: 'Đã thanh toán' }, { code: 'MOC-0185', date: '10:39 · 05/11', customer: 'Nguyễn Minh', method: 'Tiền mặt', amount: 89000, status: 'Đã thanh toán' }, { code: 'MOC-0184', date: '10:32 · 05/11', customer: 'Khách lẻ', method: 'QR chuyển khoản', amount: 132000, status: 'Đã thanh toán' }],
+    columns: [{ key: 'code', label: 'Mã hóa đơn' }, { key: 'table', label: 'Phòng/bàn' }, { key: 'order', label: 'Đơn hàng' }, { key: 'customer', label: 'Khách hàng' }, { key: 'amount', label: 'Tổng tiền hàng', type: 'currency' }, { key: 'due', label: 'Khách cần trả', type: 'currency' }, { key: 'paid', label: 'Khách đã trả', type: 'currency' }, { key: 'date', label: 'Giờ đến' }, { key: 'branch', label: 'Chi nhánh' }, { key: 'receiver', label: 'Người nhận đơn' }, { key: 'creator', label: 'Người tạo đơn' }, { key: 'status', label: 'Trạng thái', type: 'status' }],
+    fields: [{ key: 'code', label: 'Mã hóa đơn', readOnly: true, required: true }, { key: 'table', label: 'Phòng/bàn', type: 'select', options: ['Mang về', 'Bàn 01', 'Bàn 02', 'Bàn 03'] }, { key: 'order', label: 'Đơn hàng', required: true }, { key: 'customer', label: 'Khách hàng', required: true }, { key: 'items', label: 'Order / sản phẩm', type: 'textarea' }, { key: 'amount', label: 'Tổng tiền hàng (₫)', type: 'number', required: true }, { key: 'discount', label: 'Giảm giá (₫)', type: 'number' }, { key: 'due', label: 'Khách cần trả (₫)', type: 'number', required: true, readOnly: true }, { key: 'paid', label: 'Khách đã trả (₫)', type: 'number' }, { key: 'date', label: 'Giờ đến', type: 'text', required: true }, { key: 'branch', label: 'Chi nhánh', type: 'select', options: ['Mộc Store · Quận 1', 'Mộc Store · Quận 3'] }, { key: 'receiver', label: 'Người nhận đơn', type: 'select', options: ['Thu ngân A', 'Quản lý chi nhánh', 'Pha chế'] }, { key: 'creator', label: 'Người tạo đơn', type: 'select', options: ['Thu ngân A', 'Quản lý chi nhánh', 'Pha chế'] }, { key: 'method', label: 'Phương thức thanh toán', type: 'select', options: ['Tiền mặt', 'Chuyển khoản', 'QR'] }, { key: 'status', label: 'Trạng thái', type: 'select', options: ['Đã thanh toán', 'Chờ thanh toán', 'Đã hủy'] }],
+    rows: [{ code: 'HD000188', table: 'Mang về', order: '168-32', customer: 'Khách lẻ', items: 'Cà phê sữa ×2 · Croissant ×1', amount: 140000, discount: 0, due: 140000, paid: 0, date: '09/11/2026 08:48', branch: 'Mộc Store · Quận 1', receiver: 'Thu ngân A', creator: 'Thu ngân A', method: 'QR', status: 'Chờ thanh toán' }, { code: 'HD000186', table: 'Bàn 01', order: '168-15', customer: 'Khách lẻ', items: 'Trà đào ×2 · Bạc xỉu ×1', amount: 245000, discount: 0, due: 245000, paid: 245000, date: '09/11/2026 08:42', branch: 'Mộc Store · Quận 1', receiver: 'Quản lý chi nhánh', creator: 'Thu ngân A', method: 'Chuyển khoản', status: 'Đã thanh toán' }, { code: 'HD000185', table: 'Bàn 03', order: '163-358', customer: 'Nguyễn Minh', items: 'Cà phê đen ×1 · Bánh ×1', amount: 89000, discount: 0, due: 89000, paid: 89000, date: '09/11/2026 08:39', branch: 'Mộc Store · Quận 1', receiver: 'Pha chế', creator: 'Thu ngân A', method: 'Tiền mặt', status: 'Đã thanh toán' }],
     metrics: [{ label: 'Đơn hàng hôm nay', value: '186', hint: 'Tăng 8,2% so với hôm qua' }, { label: 'Doanh thu', value: '12.850.000 ₫', hint: 'Trong ngày hôm nay' }, { label: 'Chờ thanh toán', value: '3', hint: 'Cần theo dõi' }],
   },
   {
@@ -115,10 +130,24 @@ export const managementModules: ManagementModule[] = [
     metrics: [{ label: 'Chức vụ', value: '5', hint: 'Đang sử dụng' }, { label: 'Nhân viên', value: '18', hint: 'Đã được phân quyền' }, { label: 'Chính sách', value: '6', hint: 'Đang áp dụng' }],
   },
   {
-    id: 'cashbook', path: '/management/cashbook', title: 'Sổ quỹ', description: 'Theo dõi thu, chi và số dư tiền mặt tại cửa hàng.', entity: 'phiếu thu chi', searchPlaceholder: 'Tìm mã phiếu hoặc nội dung...', filters: ['Thu', 'Chi'],
-    columns: [{ key: 'code', label: 'Mã phiếu' }, { key: 'date', label: 'Thời gian', type: 'date' }, { key: 'category', label: 'Khoản mục' }, { key: 'note', label: 'Nội dung' }, { key: 'amount', label: 'Số tiền', type: 'currency' }, { key: 'type', label: 'Loại', type: 'status' }],
-    fields: [{ key: 'code', label: 'Mã phiếu', required: true }, { key: 'date', label: 'Ngày ghi sổ', type: 'date', required: true }, { key: 'category', label: 'Khoản mục', required: true }, { key: 'note', label: 'Nội dung', required: true }, { key: 'amount', label: 'Số tiền (₫)', type: 'number', required: true }, { key: 'type', label: 'Loại phiếu', required: true }],
-    rows: [{ code: 'PT-0348', date: '05/11 · 11:03', category: 'Bán hàng', note: 'Thu tiền mặt từ POS', amount: 1850000, type: 'Thu' }, { code: 'PC-0204', date: '05/11 · 09:15', category: 'Nhập hàng', note: 'Thanh toán nguyên liệu', amount: 860000, type: 'Chi' }, { code: 'PT-0347', date: '04/11 · 21:30', category: 'Kết ca', note: 'Bàn giao tiền cuối ngày', amount: 4280000, type: 'Thu' }, { code: 'PC-0203', date: '04/11 · 15:20', category: 'Vận hành', note: 'Mua vật dụng cửa hàng', amount: 345000, type: 'Chi' }],
+    id: 'cashbook', path: '/management/cashbook', title: 'Sổ quỹ', description: 'Theo dõi thu, chi và số dư tiền mặt tại cửa hàng.', entity: 'phiếu thu chi', searchPlaceholder: 'Tìm mã phiếu hoặc nội dung...', filters: ['Đã thanh toán', 'Chưa thanh toán'],
+    columns: [{ key: 'code', label: 'Mã phiếu' }, { key: 'status', label: 'Thanh toán', type: 'status' }, { key: 'voucher', label: 'Loại phiếu' }, { key: 'amount', label: 'Giá trị', type: 'currency' }, { key: 'category', label: 'Loại thu/chi' }, { key: 'payerGroup', label: 'Nhóm người nộp' }, { key: 'payer', label: 'Người nộp' }, { key: 'method', label: 'Phương thức' }, { key: 'branch', label: 'Chi nhánh' }, { key: 'creator', label: 'Người tạo' }],
+    fields: [{ key: 'code', label: 'Mã phiếu', readOnly: true }, { key: 'status', label: 'Trạng thái thanh toán', type: 'select', options: ['Đã thanh toán', 'Chưa thanh toán'] }, { key: 'voucher', label: 'Loại phiếu', type: 'select', options: ['Phiếu Thu', 'Phiếu Chi'] }, { key: 'amount', label: 'Giá trị (₫)', type: 'number', required: true }, { key: 'category', label: 'Loại thu/chi', type: 'select', options: ['Thu tiền khách hàng', 'Thu khác', 'Chi nhập hàng', 'Chi vận hành'] }, { key: 'payerGroup', label: 'Nhóm người nộp', type: 'select', options: ['Khách hàng', 'Nhà cung cấp', 'Nhân viên', 'Khác'] }, { key: 'payer', label: 'Người nộp' }, { key: 'method', label: 'Phương thức', type: 'select', options: ['Tiền mặt', 'Chuyển khoản'] }, { key: 'branch', label: 'Chi nhánh', type: 'select', options: ['Mộc Store · Quận 1', 'Mộc Store · Quận 3'] }, { key: 'creator', label: 'Người tạo', type: 'select', options: ['Thu ngân A', 'Quản lý chi nhánh', 'Pha chế'] }, { key: 'date', label: 'Ngày ghi sổ', type: 'text', required: true }, { key: 'note', label: 'Ghi chú' }],
+    rows: [{ code: 'TTHD039369', status: 'Đã thanh toán', voucher: 'Phiếu Thu', amount: 146000, category: 'Thu tiền khách hàng', payerGroup: 'Khách hàng', payer: 'Nguyễn Minh', method: 'Tiền mặt', branch: 'Mộc Store · Quận 1', creator: 'Thu ngân A', date: '09/11/2026 08:48', note: 'Thanh toán hóa đơn HD000186' }, { code: 'TTHD039368', status: 'Chưa thanh toán', voucher: 'Phiếu Thu', amount: 245000, category: 'Thu tiền khách hàng', payerGroup: 'Khách hàng', payer: '', method: 'Chuyển khoản', branch: 'Mộc Store · Quận 1', creator: 'Quản lý chi nhánh', date: '09/11/2026 08:42', note: '' }, { code: 'CCHD020401', status: 'Đã thanh toán', voucher: 'Phiếu Chi', amount: 860000, category: 'Chi nhập hàng', payerGroup: 'Nhà cung cấp', payer: 'Cà phê Tây Nguyên', method: 'Chuyển khoản', branch: 'Mộc Store · Quận 1', creator: 'Quản lý chi nhánh', date: '09/11/2026 09:15', note: 'Thanh toán nhập hàng' }],
     metrics: [{ label: 'Số dư đầu kỳ', value: '18.450.000 ₫', hint: 'Ngày 01/11/2026' }, { label: 'Tổng thu', value: '46.280.000 ₫', hint: 'Từ 01/11 đến nay' }, { label: 'Tổng chi', value: '24.620.000 ₫', hint: 'Từ 01/11 đến nay' }],
+  },
+  {
+    id: 'bank-accounts', path: '/management/bank-accounts', title: 'Tài khoản ngân hàng', description: 'Quản lý tài khoản nhận và đối soát chuyển khoản.', entity: 'tài khoản ngân hàng', searchPlaceholder: 'Tìm tên tài khoản, ngân hàng hoặc số tài khoản...',
+    columns: [{ key: 'name', label: 'Tên tài khoản' }, { key: 'bank', label: 'Ngân hàng' }, { key: 'accountNumber', label: 'Số tài khoản' }, { key: 'holder', label: 'Chủ tài khoản' }, { key: 'branches', label: 'Chi nhánh áp dụng' }, { key: 'note', label: 'Ghi chú' }],
+    fields: [{ key: 'name', label: 'Tên tài khoản', required: true }, { key: 'bank', label: 'Ngân hàng', type: 'bank-picker', required: true }, { key: 'accountNumber', label: 'Số tài khoản', required: true }, { key: 'holder', label: 'Chủ tài khoản', required: true }, { key: 'note', label: 'Ghi chú', type: 'textarea' }, { key: 'branches', label: 'Chi nhánh áp dụng', type: 'multi-select', options: ['Tất cả chi nhánh', 'Mộc Store · Quận 1', 'Mộc Store · Quận 3'] }],
+    rows: [{ name: 'Tài khoản chính', bank: 'Vietcombank', accountNumber: '0123456789', holder: 'CONG TY MOC STORE', branches: 'Tất cả chi nhánh', note: 'Tài khoản nhận thanh toán QR' }],
+    metrics: [{ label: 'Tài khoản đang dùng', value: '1', hint: 'Đang nhận thanh toán' }, { label: 'Chi nhánh áp dụng', value: 'Tất cả', hint: 'Có thể giới hạn theo tài khoản' }, { label: 'Đối soát', value: 'Sẵn sàng', hint: 'Cấu hình tài khoản demo' }],
+  },
+  {
+    id: 'rooms', path: '/management/rooms', title: 'Phòng / bàn', description: 'Tạo và quản lý khu vực phục vụ tại cửa hàng.', entity: 'phòng / bàn', searchPlaceholder: 'Tìm tên bàn hoặc ghi chú...',
+    columns: [{ key: 'name', label: 'Tên phòng/bàn' }, { key: 'note', label: 'Ghi chú' }],
+    fields: [{ key: 'name', label: 'Tên', required: true }, { key: 'note', label: 'Ghi chú', type: 'textarea' }],
+    rows: [{ name: 'Mang về', note: 'Đơn mua mang đi' }, { name: 'Bàn 01', note: 'Gần cửa sổ' }, { name: 'Bàn 02', note: '' }, { name: 'Bàn 03', note: 'Khu vực ngoài trời' }],
+    metrics: [{ label: 'Phòng / bàn', value: '4', hint: 'Có thể thêm bàn mới' }, { label: 'Đang phục vụ', value: '1', hint: 'Cập nhật theo đơn' }, { label: 'Chi nhánh', value: 'Quận 1', hint: 'Mộc Store' }],
   },
 ]

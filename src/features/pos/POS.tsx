@@ -6,8 +6,23 @@ import { createMockOrder, getOfflineOrderQueue, simulateOfflineOrderSync } from 
 import { usePosStore } from '../../stores/posStore'
 import type { Product } from '../../types'
 import { ProductArtwork } from '../../components/ProductArtwork'
+import { managementModules, type ManagementRow } from '../management/moduleConfig'
 
-const categories = ['Tất cả', 'Cà phê', 'Trà', 'Bánh', 'Retail SKU']
+const categoryColors: Record<string, string> = { 'Cà phê': '#f2e5d6', 'Trà': '#f7e1d7', 'Đồ ăn': '#f5e4c7', 'Retail SKU': '#e5e9e4', 'Bia': '#e8ecd4', 'Cacao': '#eadbd3' }
+
+function loadCatalogProducts(): Product[] {
+  try {
+    const saved: unknown = JSON.parse(localStorage.getItem('fnb-management:menu-items') ?? 'null')
+    if (!Array.isArray(saved) || saved.length === 0) return products
+    return saved.filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null)
+      .filter((item) => item.visible !== false && item.status !== 'Tạm hết')
+      .map((item, index) => {
+        const category = String(item.category ?? 'Khác')
+        const code = String(item.code ?? `M${String(index + 1).padStart(5, '0')}`)
+        return { id: code, sku: code, name: String(item.name ?? 'Sản phẩm'), category, price: Number(item.price) || 0, stock: Number(item.stock) || 0, minimum: Number(item.minimum) || 0, color: categoryColors[category] ?? '#edf2ee', image: typeof item.image === 'string' ? item.image : undefined }
+      })
+  } catch { return products }
+}
 
 export function POS() {
   const [search, setSearch] = useState('')
@@ -20,20 +35,44 @@ export function POS() {
   const [ordersOpen, setOrdersOpen] = useState(false)
   const [paymentOptionsOpen, setPaymentOptionsOpen] = useState(false)
   const [cartExpanded, setCartExpanded] = useState(false)
-  const { items, discount, note, add, setQuantity, remove, setDiscount, setNote, clear } = usePosStore()
+  const catalogProducts = useMemo(() => loadCatalogProducts(), [])
+  const categories = useMemo(() => ['Tất cả', ...new Set(catalogProducts.map((product) => product.category))], [catalogProducts])
+  const { items, discount, note, customer, table, orderCode, add, setQuantity, remove, setDiscount, setNote, setCustomer, setTable, nextOrder, clear } = usePosStore()
+  const [rooms] = useState(() => {
+    try {
+      const records: unknown = JSON.parse(localStorage.getItem('fnb-management:rooms') ?? '[]')
+      const names = Array.isArray(records) ? records.map((record) => typeof record === 'object' && record !== null && 'name' in record ? String(record.name) : '').filter(Boolean) : []
+      return names.length ? names : ['Mang về', 'Bàn 01', 'Bàn 02', 'Bàn 03']
+    } catch { return ['Mang về', 'Bàn 01', 'Bàn 02', 'Bàn 03'] }
+  })
+  const [customers] = useState(() => {
+    try {
+      const records: unknown = JSON.parse(localStorage.getItem('fnb-management:customers') ?? '[]')
+      const names = Array.isArray(records) ? records.map((record) => typeof record === 'object' && record !== null && 'name' in record ? String(record.name) : '').filter(Boolean) : []
+      return ['Khách lẻ', ...names]
+    } catch { return ['Khách lẻ'] }
+  })
   const subtotal = items.reduce((total, line) => total + line.product.price * line.quantity, 0)
   const total = Math.max(0, subtotal - discount)
-  const visibleProducts = useMemo(() => products.filter((product) => {
+  const visibleProducts = useMemo(() => catalogProducts.filter((product) => {
     const matchesSearch = `${product.name} ${product.sku}`.toLocaleLowerCase('vi').includes(search.toLocaleLowerCase('vi'))
     return matchesSearch && (category === 'Tất cả' || product.category === category)
-  }), [category, search])
+  }), [catalogProducts, category, search])
 
-  const pay = async () => {
+  const pay = async (received: number) => {
     if (items.length === 0) return
     const order = await createMockOrder({ total, paymentMethod: payment ?? 'cash', offline })
+    const now = new Date()
+    const date = new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).format(now)
+    const itemSummary = items.map(({ product, quantity }) => `${product.name} ×${quantity}`).join(' · ')
+    const paidAmount = Math.min(received, total)
+    const paidStatus = paidAmount >= total ? 'Đã thanh toán' : 'Chờ thanh toán'
+    const invoiceCode = appendManagementRecord('invoices', 'HD', 6, { table, order: orderCode, customer, items: itemSummary, note, amount: subtotal, discount, due: total, paid: paidAmount, date, branch: 'Mộc Store · Quận 1', receiver: 'Thu ngân A', creator: 'Thu ngân A', method: payment === 'qr' ? 'Chuyển khoản' : 'Tiền mặt', status: paidStatus })
+    appendManagementRecord('cashbook', 'TTHD', 6, { status: paidStatus, voucher: 'Phiếu Thu', amount: paidAmount, category: 'Thu tiền khách hàng', payerGroup: 'Khách hàng', payer: customer === 'Khách lẻ' ? '' : customer, method: payment === 'qr' ? 'Chuyển khoản' : 'Tiền mặt', branch: 'Mộc Store · Quận 1', creator: 'Thu ngân A', date, note: `Thanh toán hóa đơn ${invoiceCode} · ${table} · ${itemSummary}${note ? ` · ${note}` : ''}` })
     if (order.queuedForSync) setQueuedOrders((current) => [order.orderCode, ...current])
     setReceipt(order.orderCode)
     setPayment(null)
+    nextOrder()
     clear()
   }
 
@@ -76,7 +115,8 @@ export function POS() {
         <div className="mobile-cart-handle" />
         <div className="cart-header"><button className="cart-title-button" type="button" onClick={() => setCartExpanded((expanded) => !expanded)} aria-expanded={cartExpanded}><div><h2 className="cart-title-desktop">Đơn hàng hiện tại</h2><h2 className="cart-title-mobile">Đơn hiện tại · {items.reduce((totalCount, item) => totalCount + item.quantity, 0)} món</h2><p className="cart-count-desktop">{items.reduce((totalCount, item) => totalCount + item.quantity, 0)} sản phẩm</p><p className="cart-items-mobile">{items.map(({ product, quantity }) => `${product.name} ×${quantity}`).join('  ·  ') || 'Chọn sản phẩm để bắt đầu'}</p></div><ChevronDown size={17} className="mobile-cart-chevron" /></button><button className="cart-clear" type="button" onClick={clear} disabled={items.length === 0}><Trash2 size={16} /> Xóa</button></div>
         <div className="mobile-cart-summary"><div><span>Tổng thanh toán</span><strong>{formatCurrency(total)}</strong></div><button type="button" disabled={!items.length} onClick={() => setPaymentOptionsOpen(true)}>Thanh toán</button></div>
-        <div className="order-type"><span className="order-type-icon"><ShoppingBag size={15} /></span><span>Bán tại quầy</span><ChevronDown size={14} /></div>
+        <div className="order-type"><span className="order-type-icon"><ShoppingBag size={15} /></span><span>Đơn hàng {orderCode}</span><span className="order-type-mode">Bán tại quầy</span></div>
+        <div className="cart-metadata"><label>Khách hàng<input list="pos-customer-list" value={customer} onChange={(event) => setCustomer(event.target.value)} /><datalist id="pos-customer-list">{customers.map((item) => <option key={item} value={item} />)}</datalist></label><label>Phòng / bàn<select value={table} onChange={(event) => setTable(event.target.value)}>{rooms.map((room) => <option key={room}>{room}</option>)}</select></label></div>
         <div className="cart-lines">{items.map(({ product, quantity }) => <CartItem key={product.id} product={product} quantity={quantity} onChange={setQuantity} onRemove={remove} />)}{items.length === 0 && <div className="cart-empty"><span className="cart-empty-icon"><ShoppingBag size={22} /></span><strong>Đơn hàng đang trống</strong><p>Chọn sản phẩm để bắt đầu tạo đơn.</p></div>}</div>
         <div className="cart-note"><label htmlFor="order-note">Ghi chú đơn hàng</label><textarea id="order-note" value={note} onChange={(event) => setNote(event.target.value)} placeholder="Thêm ghi chú..." rows={2} /></div>
         <div className="discount-row"><span>Giảm giá</span><label><input type="number" min="0" max={subtotal} value={discount || ''} onChange={(event) => setDiscount(Math.min(subtotal, Number(event.target.value) || 0))} placeholder="0" /><span>₫</span></label></div>
@@ -91,6 +131,25 @@ export function POS() {
       {ordersOpen && <OrdersDialog onClose={() => setOrdersOpen(false)} />}
     </div>
   )
+}
+
+function appendManagementRecord(moduleId: string, prefix: string, digits: number, values: ManagementRow) {
+  const module = managementModules.find((item) => item.id === moduleId)
+  if (!module) return ''
+  const key = `fnb-management:${moduleId}`
+  let rows = module.rows
+  try {
+    const saved: unknown = JSON.parse(localStorage.getItem(key) ?? 'null')
+    if (Array.isArray(saved)) rows = saved as ManagementRow[]
+  } catch { /* use the bundled demo records */ }
+  const highest = rows.reduce((max, row) => {
+    const savedCode = String(row.code ?? '')
+    const number = Number(savedCode.startsWith(prefix) ? savedCode.slice(prefix.length) : '')
+    return Number.isFinite(number) ? Math.max(max, number) : max
+  }, 0)
+  const code = `${prefix}${String(highest + 1).padStart(digits, '0')}`
+  localStorage.setItem(key, JSON.stringify([{ ...values, code, __id: crypto.randomUUID() }, ...rows]))
+  return code
 }
 
 function PaymentOptions({ onClose, onSelect }: { onClose: () => void; onSelect: (kind: 'cash' | 'qr') => void }) {
@@ -115,7 +174,7 @@ function CartItem({ product, quantity, onChange, onRemove }: { product: Product;
   return <div className="cart-item"><ProductArtwork product={product} compact /><div className="cart-item-body"><div className="cart-item-title"><strong>{product.name}</strong><button type="button" aria-label={`Xóa ${product.name}`} onClick={() => onRemove(product.id)}><X size={14} /></button></div><div className="cart-item-bottom"><span>{formatCurrency(product.price)}</span><div className="quantity-control"><button type="button" aria-label="Giảm số lượng" onClick={() => onChange(product.id, quantity - 1)}><Minus size={12} /></button><strong>{quantity}</strong><button type="button" aria-label="Tăng số lượng" onClick={() => onChange(product.id, quantity + 1)}><Plus size={12} /></button></div></div></div></div>
 }
 
-function PaymentDialog({ kind, total, offline, onClose, onPay }: { kind: 'cash' | 'qr'; total: number; offline: boolean; onClose: () => void; onPay: () => void }) {
+function PaymentDialog({ kind, total, offline, onClose, onPay }: { kind: 'cash' | 'qr'; total: number; offline: boolean; onClose: () => void; onPay: (received: number) => Promise<void> }) {
   const [received, setReceived] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -124,7 +183,7 @@ function PaymentDialog({ kind, total, offline, onClose, onPay }: { kind: 'cash' 
     setBusy(true)
     setError('')
     try {
-      await onPay()
+      await onPay(kind === 'cash' ? Number(received) : total)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Không thể tạo đơn hàng.')
       setBusy(false)

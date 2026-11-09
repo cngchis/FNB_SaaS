@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react'
 import { ChevronLeft, ChevronRight, Download, Pencil, Plus, Search, X } from 'lucide-react'
 import { formatCurrency } from '../../services/mockData'
 import { managementModules, type ManagementModule, type ManagementRow, type ManagementValue } from './moduleConfig'
@@ -9,16 +9,54 @@ const storageKey = (moduleId: string) => `fnb-management:${moduleId}`
 function loadRows(module: ManagementModule): ManagementRow[] {
   try {
     const saved = localStorage.getItem(storageKey(module.id))
-    if (saved) return JSON.parse(saved) as ManagementRow[]
+    if (saved) return migrateRows(module.id, JSON.parse(saved) as ManagementRow[])
   } catch {
     return module.rows
   }
   return module.rows
 }
 
+function migrateRows(moduleId: string, rows: ManagementRow[]) {
+  if (!Array.isArray(rows)) return []
+  if (moduleId === 'menu-items') return rows.map((row, index) => {
+    const currentCode = String(row.code ?? '')
+    return { ...row,
+      code: /^M\d{5}$/.test(currentCode) ? currentCode : `M${String(index + 1).padStart(5, '0')}`,
+      productType: row.productType ?? (row.category === 'Retail SKU' ? 'Hàng hóa thường' : 'Chế biến'),
+      menuType: row.menuType ?? (row.category === 'Bánh' || row.category === 'Đồ ăn' ? 'Đồ ăn' : 'Đồ uống'),
+      visible: row.visible ?? true, extra: row.extra ?? false, points: row.points ?? true,
+      image: row.image ?? '', attributes: row.attributes ?? '[]', units: row.units ?? '[]',
+    }
+  })
+  if (moduleId === 'invoices') return rows.map((row) => {
+    const oldCode = String(row.code ?? '')
+    const code = oldCode.startsWith('MOC-') ? `HD${oldCode.slice(4).padStart(6, '0')}` : oldCode
+    const amount = Number(row.amount ?? 0)
+    return { ...row, code, table: row.table ?? 'Mang về', order: row.order ?? '', items: row.items ?? '', amount, discount: row.discount ?? 0, due: row.due ?? amount, paid: row.paid ?? (row.status === 'Đã thanh toán' ? amount : 0), date: row.date ?? '', branch: row.branch ?? 'Mộc Store · Quận 1', receiver: row.receiver ?? 'Thu ngân A', creator: row.creator ?? 'Thu ngân A' }
+  })
+  if (moduleId === 'cashbook') return rows.map((row) => {
+    const oldType = String(row.type ?? '')
+    const oldCode = String(row.code ?? '')
+    const amountText = oldCode.match(/\d+/)?.[0] ?? '1'
+    const code = oldCode.startsWith('PT-') ? `TTHD${amountText.padStart(6, '0')}` : oldCode.startsWith('PC-') ? `CCHD${amountText.padStart(6, '0')}` : oldCode
+    return { ...row, code, status: row.status ?? 'Đã thanh toán', voucher: row.voucher ?? (oldType === 'Chi' ? 'Phiếu Chi' : 'Phiếu Thu'), category: row.category ?? row.note ?? '', payerGroup: row.payerGroup ?? (oldType === 'Thu' ? 'Khách hàng' : 'Nhà cung cấp'), payer: row.payer ?? '', method: row.method ?? 'Tiền mặt', branch: row.branch ?? 'Mộc Store · Quận 1', creator: row.creator ?? 'Thu ngân A', date: row.date ?? '' }
+  })
+  return rows
+}
+
 function displayValue(value: ManagementValue, type?: string) {
   if (type === 'currency' && typeof value === 'number') return formatCurrency(value)
+  if (typeof value === 'boolean') return value ? 'Có' : 'Không'
   return String(value)
+}
+
+function nextCode(rows: ManagementRow[], prefix: string, digits: number) {
+  const highest = rows.reduce((max, row) => {
+    const code = String(row.code ?? '')
+    const number = Number(code.replace(prefix, ''))
+    return Number.isFinite(number) ? Math.max(max, number) : max
+  }, 0)
+  return `${prefix}${String(highest + 1).padStart(digits, '0')}`
 }
 
 export function ManagementRecordPage({ moduleId }: { moduleId: string }) {
@@ -79,9 +117,13 @@ function RecordWorkspace({ module }: { module: ManagementModule }) {
     event.preventDefault()
     const formData = new FormData(event.currentTarget)
     const values = Object.fromEntries(module.fields.map((field) => {
-      const value = String(formData.get(field.key) ?? '').trim()
+      const raw = formData.get(field.key)
+      const value = field.type === 'checkbox' ? raw === 'on' : String(raw ?? '').trim()
       return [field.key, field.type === 'number' && value ? Number(value) : value]
     })) as ManagementRow
+    saveValues(values)
+  }
+  const saveValues = (values: ManagementRow) => {
     const record: ManagementRow = editing
       ? { ...values, ...(editing.__id ? { __id: editing.__id } : {}) }
       : { ...values, __id: crypto.randomUUID() }
@@ -100,7 +142,7 @@ function RecordWorkspace({ module }: { module: ManagementModule }) {
     window.setTimeout(() => setNotice(''), 2600)
   }
 
-  return <section className="record-page">
+  return <section className={`record-page record-page-${module.id}`}>
     <div className="page-title-row"><div><div className="record-breadcrumb">Quản lý cửa hàng <span>/</span> {module.title}</div><h1>{module.title}</h1><p>{module.description}</p></div><div className="record-actions"><button className="button button-secondary" type="button" onClick={exportCsv}><Download size={15} /> Xuất file</button><button className="button button-primary" type="button" onClick={() => { setEditing(null); setFormOpen(true) }}><Plus size={16} /> Thêm {module.entity}</button></div></div>
 
     <div className="record-metrics">{module.metrics.map((metric) => <article className="record-metric" key={metric.label}><span>{metric.label}</span><strong>{metric.value}</strong><small>{metric.hint}</small></article>)}</div>
@@ -109,8 +151,8 @@ function RecordWorkspace({ module }: { module: ManagementModule }) {
       <div className="record-toolbar"><label className="search-field"><Search size={16} /><input aria-label={module.searchPlaceholder} value={query} onChange={(event) => { setQuery(event.target.value); setPage(1) }} placeholder={module.searchPlaceholder} /><kbd>⌘ K</kbd></label><div className="record-filters"><button type="button" className={filter === 'Tất cả' ? 'active' : ''} onClick={() => { setFilter('Tất cả'); setPage(1) }}>Tất cả</button>{module.filters?.map((item) => <button type="button" key={item} className={filter === item ? 'active' : ''} onClick={() => { setFilter(item); setPage(1) }}>{item}</button>)}</div></div>
       <div className="table-scroll"><table className="data-table record-table"><thead><tr>{module.columns.map((column) => <th key={column.key}><button type="button" onClick={() => toggleSort(column.key)}>{column.label}<span aria-hidden="true">{sortKey === column.key ? ascending ? ' ↑' : ' ↓' : ' ↕'}</span></button></th>)}<th aria-label="Thao tác" /></tr></thead><tbody>
         {visibleRows.map((row, rowIndex) => <tr key={`${module.id}-${row.__id ?? row.code ?? row.name ?? row.employee ?? rowIndex}-${rowIndex}`}>
-          {module.columns.map((column, columnIndex) => <td key={column.key} data-label={column.label} className={`${column.type === 'status' ? 'record-status-cell' : ''} ${columnIndex === 0 ? 'record-primary-cell' : ''}`}>
-            {column.type === 'status' ? <span className={`status-badge ${/đã|đang|hoàn tất|xác nhận/i.test(String(row[column.key])) ? 'in-stock' : 'low'}`}><i />{displayValue(row[column.key] ?? '', column.type)}</span> : displayValue(row[column.key] ?? '', column.type)}
+          {module.columns.map((column, columnIndex) => <td key={column.key} data-label={column.label} className={`record-field-${column.key} ${column.type === 'status' ? 'record-status-cell' : ''} ${columnIndex === 0 ? 'record-primary-cell' : ''}`}>
+            {column.type === 'status' ? <span className={`status-badge ${/đã|đang|hoàn tất|xác nhận/i.test(String(row[column.key])) ? 'in-stock' : 'low'}`}><i />{displayValue(row[column.key] ?? '', column.type)}</span> : module.id === 'menu-items' && column.key === 'stock' && row.productType === 'Chế biến' ? '—' : displayValue(row[column.key] ?? '', column.type)}
           </td>)}
           <td className="record-row-actions"><button type="button" className="row-menu" aria-label={`Sửa ${String(row[module.columns[0].key] ?? '')}`} onClick={() => { setEditing(row); setFormOpen(true) }}><Pencil size={15} /></button><button type="button" className="record-delete" aria-label={`Xóa ${String(row[module.columns[0].key] ?? '')}`} onClick={() => setDeleteTarget(row)}><X size={15} /></button></td>
         </tr>)}
@@ -120,10 +162,125 @@ function RecordWorkspace({ module }: { module: ManagementModule }) {
     </section>
 
     {notice && <div className="toast" role="status"><span className="toast-check">✓</span>{notice}</div>}
-    {formOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setFormOpen(false) }}><section className="modal-card record-dialog" role="dialog" aria-modal="true" aria-labelledby="record-dialog-title"><button className="modal-close" type="button" onClick={() => setFormOpen(false)} aria-label="Đóng"><X size={18} /></button><span className="modal-icon"><Plus size={18} /></span><h2 id="record-dialog-title">{editing ? `Cập nhật ${module.entity}` : `Thêm ${module.entity}`}</h2><p>Thông tin được lưu trong dữ liệu demo trên thiết bị.</p><form onSubmit={saveRecord}><div className="record-form-grid">{module.fields.map((field) => {
-      const choices = field.key === 'type' ? module.filters : field.key === 'status' ? [...new Set(rows.map((row) => String(row.status ?? '')).filter(Boolean))] : undefined
-      return <label className="form-label" key={field.key}>{field.label}{choices?.length ? <select name={field.key} defaultValue={String(editing?.[field.key] ?? choices[0])} required={field.required}>{choices.map((choice) => <option key={choice}>{choice}</option>)}</select> : <input name={field.key} type={field.type === 'number' || field.type === 'tel' ? field.type : 'text'} inputMode={field.type === 'date' ? 'numeric' : undefined} defaultValue={editing?.[field.key] == null ? '' : String(editing[field.key])} required={field.required} min={field.type === 'number' ? 0 : undefined} />}</label>
-    })}</div><div className="modal-actions"><button className="button button-secondary" type="button" onClick={() => setFormOpen(false)}>Hủy</button><button className="button button-primary" type="submit">{editing ? 'Lưu thay đổi' : `Thêm ${module.entity}`}</button></div></form></section></div>}
+    {formOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setFormOpen(false) }}><section className="modal-card record-dialog" role="dialog" aria-modal="true" aria-labelledby="record-dialog-title"><button className="modal-close" type="button" onClick={() => setFormOpen(false)} aria-label="Đóng"><X size={18} /></button><span className="modal-icon"><Plus size={18} /></span><h2 id="record-dialog-title">{editing ? `Cập nhật ${module.entity}` : `Thêm ${module.entity}`}</h2><p>Thông tin được lưu trong dữ liệu demo trên thiết bị.</p>{module.id === 'menu-items' ? <ProductEditor key={String(editing?.code ?? 'new')} initial={editing} nextProductCode={editing ? String(editing.code) : nextCode(rows, 'M', 5)} onCancel={() => setFormOpen(false)} onSave={saveValues} /> : <form onSubmit={saveRecord} onChange={(event) => { if (module.id === 'invoices') updateInvoiceDue(event.currentTarget) }}><div className="record-form-grid">{module.fields.map((field) => {
+      const defaults = module.id === 'invoices' && field.key === 'table' ? getRoomNames() : field.options ?? (field.key === 'type' ? module.filters : field.key === 'status' ? [...new Set(rows.map((row) => String(row.status ?? '')).filter(Boolean))] : undefined)
+      const defaultValue = editing?.[field.key] ?? (field.key === 'code' && module.id === 'invoices' ? nextCode(rows, 'HD', 6) : field.key === 'code' && module.id === 'cashbook' ? nextCode(rows, 'TTHD', 6) : defaults?.[0] ?? '')
+      if (field.type === 'checkbox') return <label className="form-check" key={field.key}><input name={field.key} type="checkbox" defaultChecked={editing?.[field.key] === true} /><span>{field.label}</span></label>
+      if (field.type === 'multi-select') return <MultiSelectField key={field.key} field={field} defaultValue={String(defaultValue || 'Tất cả chi nhánh')} />
+      if (field.type === 'textarea') return <label className="form-label" key={field.key}>{field.label}<textarea name={field.key} defaultValue={String(defaultValue)} required={field.required} rows={3} /></label>
+      if (field.type === 'select') return <label className="form-label" key={field.key}>{field.label}<select name={field.key} defaultValue={String(defaultValue)} required={field.required}>{defaults?.map((choice) => <option key={choice}>{choice}</option>)}</select></label>
+      if (field.type === 'bank-picker') return <label className="form-label" key={field.key}>{field.label}<input name={field.key} list="bank-list" defaultValue={String(defaultValue)} required={field.required} /><datalist id="bank-list">{bankList.map((bank) => <option key={bank} value={bank} />)}</datalist></label>
+      return <label className="form-label" key={field.key}>{field.label}<input name={field.key} type={field.type === 'number' || field.type === 'tel' ? field.type : 'text'} defaultValue={String(defaultValue)} required={field.required} min={field.type === 'number' ? 0 : undefined} readOnly={field.readOnly} /></label>
+    })}</div><div className="modal-actions"><button className="button button-secondary" type="button" onClick={() => setFormOpen(false)}>Hủy</button><button className="button button-primary" type="submit">{editing ? 'Lưu thay đổi' : `Thêm ${module.entity}`}</button></div></form>}</section></div>}
     {deleteTarget && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setDeleteTarget(null) }}><section className="modal-card delete-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-dialog-title"><button className="modal-close" type="button" onClick={() => setDeleteTarget(null)} aria-label="Đóng"><X size={18} /></button><h2 id="delete-dialog-title">Xóa {module.entity}?</h2><p>Bản ghi “{String(deleteTarget[module.columns[0].key] ?? '')}” sẽ bị xóa khỏi dữ liệu demo trên thiết bị.</p><div className="modal-actions"><button className="button button-secondary" type="button" onClick={() => setDeleteTarget(null)}>Hủy</button><button className="button button-danger" type="button" onClick={removeRecord}>Xóa bản ghi</button></div></section></div>}
   </section>
+}
+
+const bankList = ['Vietcombank', 'VietinBank', 'BIDV', 'Agribank', 'Techcombank', 'MB Bank', 'ACB', 'VPBank', 'TPBank', 'Sacombank', 'HDBank', 'VIB', 'SHB', 'OCB', 'Eximbank']
+
+function getRoomNames() {
+  try {
+    const records: unknown = JSON.parse(localStorage.getItem('fnb-management:rooms') ?? '[]')
+    const names = Array.isArray(records) ? records.map((record) => typeof record === 'object' && record !== null && 'name' in record ? String(record.name) : '').filter(Boolean) : []
+    return names.length ? names : ['Mang về', 'Bàn 01', 'Bàn 02', 'Bàn 03']
+  } catch { return ['Mang về', 'Bàn 01', 'Bàn 02', 'Bàn 03'] }
+}
+
+function updateInvoiceDue(form: HTMLFormElement) {
+  const values = new FormData(form)
+  const amount = Number(values.get('amount')) || 0
+  const discount = Number(values.get('discount')) || 0
+  const due = form.elements.namedItem('due')
+  if (due instanceof HTMLInputElement) due.value = String(Math.max(0, amount - discount))
+}
+
+function MultiSelectField({ field, defaultValue }: { field: ManagementModule['fields'][number]; defaultValue: string }) {
+  const options = field.options ?? []
+  const initial = defaultValue === 'Tất cả chi nhánh' ? ['Tất cả chi nhánh'] : defaultValue.split(', ')
+  const [selected, setSelected] = useState<string[]>(initial)
+  const toggle = (option: string) => setSelected((current) => {
+    if (option === 'Tất cả chi nhánh') return [option]
+    const next = current.filter((item) => item !== 'Tất cả chi nhánh')
+    return next.includes(option) ? next.filter((item) => item !== option) : [...next, option]
+  })
+  return <fieldset className="form-label branch-check-list"><legend>{field.label}</legend>{options.map((option) => <label key={option}><input type="checkbox" checked={selected.includes(option)} onChange={() => toggle(option)} /><span>{option}</span></label>)}<input type="hidden" name={field.key} value={selected.includes('Tất cả chi nhánh') ? 'Tất cả chi nhánh' : selected.join(', ')} /></fieldset>
+}
+
+type ProductAttribute = { name: string; value: string }
+type ProductUnit = { name: string; ratio: number }
+
+function ProductEditor({ initial, nextProductCode, onCancel, onSave }: { initial: ManagementRow | null; nextProductCode: string; onCancel: () => void; onSave: (values: ManagementRow) => void }) {
+  const [productType, setProductType] = useState(String(initial?.productType ?? 'Hàng hóa thường'))
+  const [categories, setCategories] = useState<string[]>(() => {
+    try { return [...new Set(['Cà phê', 'Cacao', 'Trà', 'Bia', 'Đồ ăn', 'Khác', ...JSON.parse(localStorage.getItem('fnb-product-groups') ?? '[]') as string[]])] } catch { return ['Cà phê', 'Cacao', 'Trà', 'Bia', 'Đồ ăn', 'Khác'] }
+  })
+  const [newCategory, setNewCategory] = useState('')
+  const [selectedCategory, setSelectedCategory] = useState(String(initial?.category ?? 'Cà phê'))
+  const [image, setImage] = useState(String(initial?.image ?? ''))
+  const [attributes, setAttributes] = useState<ProductAttribute[]>(() => parseRows<ProductAttribute>(initial?.attributes))
+  const [units, setUnits] = useState<ProductUnit[]>(() => parseRows<ProductUnit>(initial?.units))
+  const [error, setError] = useState('')
+  const [compressing, setCompressing] = useState(false)
+  const onImageChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('image/')) { setError('Vui lòng chọn tệp hình ảnh.'); return }
+    setCompressing(true); setError('')
+    try { setImage(await compressImage(file)) } catch { setError('Không thể đọc hình ảnh đã chọn.') } finally { setCompressing(false) }
+  }
+  const addCategory = () => {
+    const value = newCategory.trim()
+    if (!value) return
+    const updated = [...new Set([...categories, value])]
+    setCategories(updated); setSelectedCategory(value); setNewCategory('')
+    try { localStorage.setItem('fnb-product-groups', JSON.stringify(updated.filter((item) => !['Cà phê', 'Cacao', 'Trà', 'Bia', 'Đồ ăn', 'Khác'].includes(item)))) } catch { setError('Không thể lưu nhóm hàng mới trên thiết bị.') }
+  }
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const data = new FormData(event.currentTarget)
+    const value = (key: string) => String(data.get(key) ?? '').trim()
+    const row: ManagementRow = { code: nextProductCode, name: value('name'), category: value('category'), productType, menuType: value('menuType'), price: Number(value('price')), status: value('status'), visible: data.get('visible') === 'on', extra: data.get('extra') === 'on', points: data.get('points') === 'on', image, attributes: JSON.stringify(attributes.filter((entry) => entry.name.trim())), units: JSON.stringify(units.filter((entry) => entry.name.trim() && entry.ratio > 0)) }
+    if (productType === 'Hàng hóa thường') { row.cost = Number(value('cost')) || 0; row.stock = Number(value('stock')) || 0 }
+    onSave(row)
+  }
+  return <form onSubmit={submit} className="product-editor">
+    <div className="record-form-grid">
+      <label className="form-label">Mã hàng<input value={nextProductCode} readOnly /></label>
+      <label className="form-label">Tên hàng<input name="name" required defaultValue={String(initial?.name ?? '')} /></label>
+      <label className="form-label">Nhóm hàng<select name="category" value={selectedCategory} onChange={(event) => setSelectedCategory(event.target.value)}>{categories.map((item) => <option key={item}>{item}</option>)}</select><span className="inline-create"><input aria-label="Tên nhóm hàng mới" placeholder="Tạo nhóm hàng mới" value={newCategory} onChange={(event) => setNewCategory(event.target.value)} /><button type="button" className="button button-secondary" onClick={addCategory}>Tạo nhóm</button></span></label>
+      <label className="form-label">Loại hàng<select value={productType} onChange={(event) => setProductType(event.target.value)}><option>Hàng hóa thường</option><option>Chế biến</option></select></label>
+      <label className="form-label">Loại thực đơn<select name="menuType" defaultValue={String(initial?.menuType ?? 'Đồ uống')}><option>Đồ uống</option><option>Đồ ăn</option><option>Khác</option></select></label>
+      <label className="form-label">Giá bán (₫)<input name="price" type="number" min="0" required defaultValue={String(initial?.price ?? '')} /></label>
+      {productType === 'Hàng hóa thường' && <><label className="form-label">Giá vốn (₫)<input name="cost" type="number" min="0" defaultValue={String(initial?.cost ?? '')} /></label><label className="form-label">Tồn kho<input name="stock" type="number" min="0" defaultValue={String(initial?.stock ?? 0)} /></label></>}
+      <label className="form-label">Trạng thái<select name="status" defaultValue={String(initial?.status ?? 'Đang bán')}><option>Đang bán</option><option>Tạm hết</option></select></label>
+    </div>
+    <div className="product-checks"><label><input name="visible" type="checkbox" defaultChecked={initial?.visible !== false} /> Hiển thị trong thực đơn</label><label><input name="extra" type="checkbox" defaultChecked={initial?.extra === true} /> Là món thêm</label><label><input name="points" type="checkbox" defaultChecked={initial?.points !== false} /> Tích điểm</label></div>
+    <label className="form-label product-image-field">Hình ảnh sản phẩm<input type="file" accept="image/*" onChange={onImageChange} /><small>{compressing ? 'Đang nén ảnh...' : 'Ảnh được thu nhỏ tối đa 600px và nén trước khi lưu trên thiết bị.'}</small>{image && <img src={image} alt="Xem trước sản phẩm" />}</label>
+    <section className="product-extra-editor"><div><strong>Thuộc tính</strong><button className="button button-secondary" type="button" onClick={() => setAttributes((current) => [...current, { name: '', value: '' }])}>+ Thêm thuộc tính</button></div>{attributes.map((entry, index) => <div className="inline-edit-row" key={`attr-${index}`}><input aria-label="Tên thuộc tính" placeholder="Ví dụ: Size" value={entry.name} onChange={(event) => setAttributes((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item))} /><input aria-label="Giá trị thuộc tính" placeholder="Ví dụ: M, L, XL" value={entry.value} onChange={(event) => setAttributes((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, value: event.target.value } : item))} /><button type="button" aria-label="Xóa thuộc tính" onClick={() => setAttributes((current) => current.filter((_, itemIndex) => itemIndex !== index))}>×</button></div>)}</section>
+    <section className="product-extra-editor"><div><strong>Đơn vị tính</strong><span>Đơn vị cơ bản: 1 sản phẩm</span><button className="button button-secondary" type="button" onClick={() => setUnits((current) => [...current, { name: '', ratio: 1 }])}>+ Thêm đơn vị</button></div>{units.map((unit, index) => <div className="inline-edit-row" key={`unit-${index}`}><input aria-label="Tên đơn vị" placeholder="Ví dụ: Thùng" value={unit.name} onChange={(event) => setUnits((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item))} /><input aria-label="Số đơn vị cơ bản" type="number" min="1" value={unit.ratio} onChange={(event) => setUnits((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, ratio: Number(event.target.value) } : item))} /><span>= đơn vị cơ bản</span><button type="button" aria-label="Xóa đơn vị" onClick={() => setUnits((current) => current.filter((_, itemIndex) => itemIndex !== index))}>×</button></div>)}</section>
+    {error && <p className="form-error" role="alert">{error}</p>}<div className="modal-actions"><button className="button button-secondary" type="button" onClick={onCancel}>Hủy</button><button className="button button-primary" type="submit">Lưu món</button></div>
+  </form>
+}
+
+function parseRows<T>(value: ManagementValue | undefined): T[] {
+  try { const rows: unknown = JSON.parse(String(value ?? '[]')); return Array.isArray(rows) ? rows as T[] : [] } catch { return [] }
+}
+
+function compressImage(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const image = new Image()
+    const source = URL.createObjectURL(file)
+    image.onload = () => {
+      const scale = Math.min(1, 600 / Math.max(image.width, image.height))
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.round(image.width * scale); canvas.height = Math.round(image.height * scale)
+      const context = canvas.getContext('2d')
+      if (!context) { URL.revokeObjectURL(source); reject(new Error('Canvas is unavailable')); return }
+      context.drawImage(image, 0, 0, canvas.width, canvas.height)
+      URL.revokeObjectURL(source)
+      resolve(canvas.toDataURL('image/webp', 0.72))
+    }
+    image.onerror = () => { URL.revokeObjectURL(source); reject(new Error('Invalid image')) }
+    image.src = source
+  })
 }

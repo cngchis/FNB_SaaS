@@ -7,6 +7,7 @@ export type Product = {
   stock: number
   minimum: number
   color: string
+  image?: string
 }
 
 export type CartLine = {
