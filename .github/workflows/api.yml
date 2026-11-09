@@ -1,0 +1,62 @@
+name: API
+
+on:
+  push:
+    paths: ['apps/api/**', 'Makefile', '.github/workflows/api.yml']
+  pull_request:
+    paths: ['apps/api/**', 'Makefile', '.github/workflows/api.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: fnb_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d fnb_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_DATABASE_ADMIN_URL: host=localhost port=5432 user=postgres dbname=fnb_test sslmode=disable
+      TEST_DATABASE_ADMIN_PASSWORD: ci-only-password
+      TEST_DATABASE_URL: host=localhost port=5432 user=fnb_app dbname=fnb_test sslmode=disable
+      TEST_DATABASE_PASSWORD: ci-runtime-password
+      GIN_MODE: release
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache-dependency-path: apps/api/go.sum
+      - name: Check formatting
+        run: test -z "$(gofmt -l cmd internal tests)"
+      - name: Install migration CLI
+        run: go install github.com/pressly/goose/v3/cmd/goose@v3.24.1
+      - name: Prepare isolated CI database
+        env:
+          PGPASSWORD: ci-only-password
+        run: |
+          psql -h localhost -U postgres -d fnb_test -v ON_ERROR_STOP=1 -c "CREATE ROLE fnb_app LOGIN PASSWORD 'ci-runtime-password' NOSUPERUSER NOBYPASSRLS;"
+          goose -dir migrations postgres "$TEST_DATABASE_ADMIN_URL password=$PGPASSWORD" up
+      - name: Verify SQLC output
+        working-directory: .
+        run: |
+          make sqlc
+          git diff --exit-code -- apps/api/internal/dbgen
+      - name: Vet
+        run: go vet ./...
+      - name: Test with PostgreSQL 16
+        run: go test -race -v ./... -count=1
+      - name: Build
+        run: go build ./...

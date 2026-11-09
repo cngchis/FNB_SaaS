@@ -50,6 +50,16 @@ SQL query sources are in `sql/`; run `make sqlc` after changing them or the sche
 
 ## Current scope and known limitations
 
+### Catalog and customer APIs
+
+Authenticated CRUD endpoints are available for `/api/v1/products`, `/api/v1/product-categories`, `/api/v1/customers`, and `/api/v1/customer-groups`. Apply migration `00002_catalog_customers.sql` with `make migrate-up-local` and restart the API; do not bootstrap an existing tenant again. The current frontend remains on prototype storage and is not wired to these endpoints yet.
+
+The [catalog/customer API guide](../../docs/catalog-customers-api.md) documents payloads, filters, role gates, full-replacement PUT behavior and remaining limitations. Reads/writes use SQLC inside tenant-scoped transactions. Product codes are allocated atomically per tenant, units have exact decimal conversion ratios and independent integer prices/costs, and customer order metrics are computed from paid orders in the authenticated store.
+
+With `TEST_DATABASE_ADMIN_URL` and `TEST_DATABASE_URL` (plus optional password overrides) configured, run `go test -v ./tests -run '^TestCatalogCustomersAPI$' -count=1`. This test creates and removes its own temporary database, starts a real HTTP test server and exercises validation, authorization, cross-tenant isolation, CRUD and concurrent code allocation. The admin needs database-creation privileges and the runtime role must be `fnb_app` without superuser/BYPASSRLS.
+
 - Order/payment tables are schema foundations only; order creation, payment providers, idempotent checkout, and POS flows are not implemented in this phase.
 - Authentication supports one selected store per session. Authorization is currently role-based at the route middleware level; granular permission enforcement and membership administration are future work.
-- Live integration checks need database/account credentials supplied through environment variables. SQLC generation is integrated for the initial auth lookups; other session queries still use pgx directly.
+- Stock ledgers, recipe-derived costs and object storage/image uploads are not implemented. `image_url` accepts URLs or absolute asset paths, not base64 data URLs.
+- Live integration checks need database/account credentials supplied through environment variables. SQLC generation covers catalog, customers and initial auth lookups; session queries still use pgx directly.
+- The API GitHub Actions workflow targets PostgreSQL 16; it has not run yet. Agent-executed native integration checks used an isolated PostgreSQL 18.3 cluster, not the user's existing database.

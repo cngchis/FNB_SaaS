@@ -30,6 +30,26 @@ type Customer struct {
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
+	GroupID   pgtype.UUID        `json:"group_id"`
+	Points    int64              `json:"points"`
+}
+
+type CustomerGroup struct {
+	ID        pgtype.UUID        `json:"id"`
+	TenantID  pgtype.UUID        `json:"tenant_id"`
+	Name      string             `json:"name"`
+	Condition string             `json:"condition"`
+	Benefit   string             `json:"benefit"`
+	IsActive  bool               `json:"is_active"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
+}
+
+type EntityCounter struct {
+	TenantID pgtype.UUID `json:"tenant_id"`
+	Entity   string      `json:"entity"`
+	Value    int64       `json:"value"`
 }
 
 type Membership struct {
@@ -115,20 +135,25 @@ type Permission struct {
 }
 
 type Product struct {
-	ID          pgtype.UUID        `json:"id"`
-	TenantID    pgtype.UUID        `json:"tenant_id"`
-	CategoryID  pgtype.UUID        `json:"category_id"`
-	Sku         string             `json:"sku"`
-	Name        string             `json:"name"`
-	ProductType string             `json:"product_type"`
-	BaseUnit    string             `json:"base_unit"`
-	PriceVnd    int64              `json:"price_vnd"`
-	CostVnd     pgtype.Int8        `json:"cost_vnd"`
-	TracksStock bool               `json:"tracks_stock"`
-	IsVisible   bool               `json:"is_visible"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
-	DeletedAt   pgtype.Timestamptz `json:"deleted_at"`
+	ID           pgtype.UUID        `json:"id"`
+	TenantID     pgtype.UUID        `json:"tenant_id"`
+	CategoryID   pgtype.UUID        `json:"category_id"`
+	Sku          string             `json:"sku"`
+	Name         string             `json:"name"`
+	ProductType  string             `json:"product_type"`
+	BaseUnit     string             `json:"base_unit"`
+	PriceVnd     int64              `json:"price_vnd"`
+	CostVnd      pgtype.Int8        `json:"cost_vnd"`
+	TracksStock  bool               `json:"tracks_stock"`
+	IsVisible    bool               `json:"is_visible"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt    pgtype.Timestamptz `json:"deleted_at"`
+	MenuType     string             `json:"menu_type"`
+	Availability string             `json:"availability"`
+	IsExtra      bool               `json:"is_extra"`
+	EarnsPoints  bool               `json:"earns_points"`
+	ImageUrl     pgtype.Text        `json:"image_url"`
 }
 
 type ProductCategory struct {
@@ -138,6 +163,18 @@ type ProductCategory struct {
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
+}
+
+type ProductUnit struct {
+	ID        pgtype.UUID        `json:"id"`
+	TenantID  pgtype.UUID        `json:"tenant_id"`
+	ProductID pgtype.UUID        `json:"product_id"`
+	Name      string             `json:"name"`
+	Ratio     string             `json:"ratio"`
+	PriceVnd  int64              `json:"price_vnd"`
+	CostVnd   pgtype.Int8        `json:"cost_vnd"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
 type ProductVariant struct {

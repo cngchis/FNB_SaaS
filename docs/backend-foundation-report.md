@@ -2,11 +2,11 @@
 
 **Date:** 2026-11-10
 
-**Scope:** Backend foundation and PostgreSQL schema. Existing frontend UI and CSS were left unchanged.
+**Scope:** Backend foundation, PostgreSQL schema, catalog and customer APIs. Existing frontend UI and CSS were left unchanged.
 
 ## Summary
 
-A Go modular-monolith API foundation and PostgreSQL 16 setup were added under the existing `FNB_SaaS` project. The implementation establishes tenant-aware persistence, initial authentication, API middleware, database migrations, and local container orchestration. Full POS workflows and business modules are outside this phase.
+A Go modular-monolith API foundation and PostgreSQL 16 target configuration were added under the existing `FNB_SaaS` project. The implementation now includes catalog/customer CRUD in addition to tenant-aware persistence, authentication, middleware and migrations. Full POS workflows remain outside this phase. Native PostgreSQL is the user's local workflow; Docker is optional.
 
 ## Architecture delivered
 
@@ -16,6 +16,9 @@ A Go modular-monolith API foundation and PostgreSQL 16 setup were added under th
 - **Schema:** Goose migration includes tenants, stores, users, memberships, roles/permissions, auth sessions, product categories/products/variants, customers, orders/order items, payment methods, and payments. Monetary values use integer VND columns.
 - **Local runtime:** Docker Compose provisions PostgreSQL, runs migrations before the API, and offers a one-time bootstrap command for the first tenant/store/owner. The API image builds with Go 1.23 and runs as a non-root Alpine user.
 - **SQLC:** SQLC v1.29.0 generated typed query code in `apps/api/internal/dbgen`. Tenant lookup, login identity, and membership-store reads use generated queries; session and refresh flows still use pgx directly.
+- **Business APIs:** Products/categories and customers/groups support authenticated CRUD, role gates, validation and soft deletion. Products/customers support filtering, literal search, sorting and pagination. Product child attributes/units are replaced atomically; per-tenant codes are allocated with a transactional counter. Customer paid-order metrics are calculated in SQL for the selected store.
+- **Migration 2:** Adds menu metadata, product conversion units, customer groups/points and entity counters with forced RLS. See the [API contract](./catalog-customers-api.md) and [ADR-002](./ADR-002-catalog-customers.md).
+- **CI:** A [GitHub Actions workflow](../.github/workflows/api.yml) defines formatting, SQLC drift, vet, build and race-enabled integration checks against PostgreSQL 16. No GitHub run has been executed yet.
 
 ## Main files
 
@@ -57,21 +60,24 @@ Use distinct owner/runtime database passwords and URL-encode reserved characters
 |---|---|
 | Whitespace scan | Completed; no trailing whitespace found in added files |
 | Go formatting | Passed: `gofmt` run on Go sources |
-| Go tests | Passed: `go test ./...`; PostgreSQL RLS integration test skipped because test database URLs are not configured |
+| Go tests | Passed: unit tests and real catalog/customer HTTP integration, RLS and migration round-trip on an isolated native PostgreSQL 18.3 cluster; external auth lifecycle skipped without credentials |
 | Go build | Passed: `go build ./...` |
 | PostgreSQL migration / RLS integration test | User confirmed migration, bootstrap, readiness, login, and a PASS result for the RLS test on local database `fnb_saas`; credentials are not available to the agent |
 | Full authentication lifecycle | User confirmed PASS for the login/refresh/logout lifecycle integration test |
 | Migration rollback/reapply | User confirmed PASS for TestMigrationRoundTrip: up, down to version zero, and up again in a temporary database |
-| SQLC generation | Passed: generated with SQLC v1.29.0; initial auth lookups use generated query methods |
+| SQLC generation | Passed: SQLC v1.29.0 generated auth lookups, catalog and customer queries |
+| Go vet | Passed: `go vet ./...` |
+| Race detector | Passed: `go test -race ./... -count=1` with native PostgreSQL 18.3 integration fixtures |
+| PostgreSQL 16 / GitHub CI | Configured, not executed; local database checks used PostgreSQL 18.3 |
 | Compose validation/startup | Not run: Docker was not used; native local PostgreSQL is the requested workflow |
 | Frontend visual checks | Not applicable to this backend-only change; no frontend/CSS files were edited |
 
-The API has compiled. Local migration, bootstrap, cross-tenant isolation, authentication lifecycle, and migration rollback/reapply have been confirmed by the user. The current local foundation checks are complete; CI remains follow-up work. This report distinguishes user-confirmed results from agent-executed checks and does not imply that business modules or frontend integration are implemented.
+Foundation checks were previously confirmed by the user. The agent additionally ran migration 1+2 rollback/reapply, RLS and catalog/customer HTTP integration on a temporary PostgreSQL 18.3 cluster using a private Unix socket. The existing database was not modified. Frontend integration, PostgreSQL 16 verification and a live CI run remain pending.
 
 ## Out of scope / follow-up
 
 - Order and payment endpoints, idempotent POS checkout, and payment-provider integrations.
-- Product/customer repository endpoints and frontend API wiring.
+- Frontend API wiring; backend product/customer repository endpoints are implemented.
 - Granular permission enforcement, membership management, and multi-store switching within an active session.
-- Extending SQLC-generated query usage to session and business module repositories.
-- CI automation and execution for backend build and integration checks.
+- Extending SQLC-generated query usage to session repositories.
+- Executing the configured backend CI and adding frontend visual baseline automation before UI wiring.

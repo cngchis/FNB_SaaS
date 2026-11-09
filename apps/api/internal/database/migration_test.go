@@ -58,12 +58,14 @@ func TestMigrationRoundTrip(t *testing.T) {
 		if roleCount != 4 {
 			t.Fatalf("found %d seeded roles; want 4", roleCount)
 		}
-		var forcedRLS bool
-		if err := db.QueryRowContext(ctx, `SELECT relrowsecurity AND relforcerowsecurity FROM pg_class WHERE oid = 'public.products'::regclass`).Scan(&forcedRLS); err != nil {
-			t.Fatalf("inspect product RLS: %v", err)
-		}
-		if !forcedRLS {
-			t.Fatal("product RLS must be enabled and forced")
+		for _, table := range []string{"products", "product_units", "customer_groups", "customers", "entity_counters"} {
+			var forcedRLS bool
+			if err := db.QueryRowContext(ctx, `SELECT relrowsecurity AND relforcerowsecurity FROM pg_class WHERE oid = $1::regclass`, "public."+table).Scan(&forcedRLS); err != nil {
+				t.Fatalf("inspect %s RLS: %v", table, err)
+			}
+			if !forcedRLS {
+				t.Fatalf("%s RLS must be enabled and forced", table)
+			}
 		}
 	}
 	if err := goose.UpContext(ctx, db, migrations); err != nil {

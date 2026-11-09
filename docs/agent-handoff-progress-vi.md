@@ -2,12 +2,12 @@
 
 **Cập nhật:** 10/11/2026
 
-**Phạm vi hiện tại:** Backend foundation và database cho FNB SaaS.
+**Phạm vi hiện tại:** Backend foundation, database và API Món/Khách hàng cho FNB SaaS.
 **Lưu ý quan trọng:** Giao diện hiện tại đang được đóng băng. Không sửa UI, CSS, nội dung tiếng Việt hoặc cấu trúc render nếu chưa có yêu cầu mới.
 
 ## Tóm tắt tiến độ
 
-Đã thêm nền tảng API Go theo hướng modular monolith, migration PostgreSQL, authentication cơ bản, tenant isolation bằng RLS, Docker Compose và tài liệu vận hành. Các file mới nằm trong repository `FNB_SaaS`; frontend hiện có không bị chỉnh sửa.
+Đã thêm nền tảng API Go theo hướng modular monolith, migration PostgreSQL, authentication, tenant isolation bằng RLS, API CRUD Món/Nhóm hàng/Khách hàng/Nhóm khách và workflow CI backend. Frontend hiện có không bị chỉnh sửa, vẫn dùng dữ liệu prototype. PostgreSQL native là quy trình local chính; Docker Compose chỉ tùy chọn.
 
 Báo cáo chi tiết về phần đã triển khai có tại [backend-foundation-report.md](./backend-foundation-report.md). Hướng dẫn cài đặt và chạy API có tại [apps/api/README.md](../apps/api/README.md).
 
@@ -20,14 +20,19 @@ Báo cáo chi tiết về phần đã triển khai có tại [backend-foundation
 - Migration nền tảng gồm tenant, store, user, membership, role/permission, catalog, customer, order/order item, payment method và payment.
 - Tenant tables sử dụng forced RLS theo `app.tenant_id`; runtime role `fnb_app` được tạo không có quyền `BYPASSRLS`.
 - Docker Compose khởi động PostgreSQL, chạy migration trước API và có lệnh bootstrap tài khoản owner đầu tiên.
-- Đã có test tích hợp dự kiến kiểm tra tenant A không đọc/ghi dữ liệu tenant B.
+- Test tích hợp đã kiểm tra tenant A không đọc/ghi dữ liệu tenant B.
 - Đã thêm ADR và hướng dẫn local development.
+- Migration 2 thêm thuộc tính menu, đơn vị quy đổi có giá vốn riêng, nhóm khách và counter mã món theo tenant.
+- API CRUD Món/Nhóm hàng/Khách hàng/Nhóm khách: tìm kiếm, lọc, sort, phân trang cho món/khách, validation, soft delete và role gates.
+- Dữ liệu tiền dùng integer VND; tỷ lệ quy đổi dùng decimal string; món chế biến không nhập giá vốn thủ công/không quản lý tồn món.
+- Tổng mua và số đơn khách tính SQL từ đơn `paid` tại chi nhánh của phiên; không nhận tổng do frontend nhập.
+- Có workflow backend build/vet/tests/race/SQLC với PostgreSQL 16; chưa có lần chạy GitHub thực tế.
 
 ## Trạng thái xác minh
 
-**Cập nhật từ người dùng:** Migration trên database mới `fnb_saas`, bootstrap owner, kết nối API, đăng nhập, test RLS, test authentication lifecycle và test migration round-trip đều đã được người dùng xác nhận thành công. Các kiểm tra local hiện tại của foundation đã hoàn tất. Chưa triển khai API nghiệp vụ đầy đủ, frontend integration hoặc CI.
+**Cập nhật từ người dùng:** Foundation migration 1 trên database `fnb_saas`, bootstrap owner, readiness, đăng nhập, RLS, authentication lifecycle và migration round-trip đã được xác nhận thành công trước đợt triển khai này.
 
-Go 1.27.3 đã được nhận diện. `gofmt`, `go test ./...` và `go build ./...` đã được agent chạy thành công trước đó; các integration test cần credentials sẽ skip trong môi trường agent. SQLC v1.29.0 đã sinh code và các query tra tenant, đăng nhập, store thành viên đã dùng code sinh. Người dùng chạy PostgreSQL local và tự nhập credentials trong terminal; không lưu mật khẩu trong tài liệu/Git. Không cần Docker cho quy trình này; Compose chỉ là tùy chọn.
+**Agent trực tiếp xác minh đợt này:** SQLC v1.29.0 generation, Go unit tests/build/vet; integration HTTP CRUD/RBAC/tenant isolation/store metrics/concurrent SKU; migration 1+2 up → down → up; RLS runtime role; `go test -race ./... -count=1` PASS. Các test DB chạy trên PostgreSQL **18.3 native tạm**, qua Unix socket, tự dọn cluster sau chạy và không đụng database `fnb_saas`. Không dùng/mặc định mật khẩu người dùng. Test auth lifecycle qua API ngoài skip trong lần chạy này vì không có credentials; vẫn giữ kết quả người dùng đã xác nhận trước đó. PostgreSQL **16** và workflow GitHub chưa được xác minh.
 
 Test vòng đời authentication nằm tại [apps/api/tests/auth_integration_test.go](../apps/api/tests/auth_integration_test.go), mặc định dùng `http://localhost:8080`. Test rollback nằm tại [apps/api/internal/database/migration_test.go](../apps/api/internal/database/migration_test.go), kiểm tra up → down → up trên database tạm. Cả hai đã được người dùng xác nhận PASS. Phần Down đã sửa để gỡ policy trên `users` trước khi xóa bảng `memberships` mà policy tham chiếu.
 
@@ -36,12 +41,12 @@ Test vòng đời authentication nằm tại [apps/api/tests/auth_integration_te
 ### P0 — Tiếp tục từ foundation đã kiểm tra local
 
 1. Kiểm tra `git status` trước khi sửa để phân biệt thay đổi đã có và thay đổi của mình. Không commit hoặc push tự động.
-2. Không cần yêu cầu chạy lại các test đã PASS nếu chưa có thay đổi liên quan. Xác định module nghiệp vụ tiếp theo từ frontend hiện tại và phạm vi người dùng yêu cầu.
+2. Áp dụng migration 2 trên database local đã dùng, sau đó restart API. Không bootstrap lại. Nếu có prepared product chứa cost/tracks_stock không hợp lệ, migration từ chối; rà soát dữ liệu trước khi xử lý, không tự sửa/xóa dữ liệu.
 3. Không bootstrap lại tenant hiện có; migration, owner và RLS đã được người dùng xác nhận. Khi cần chạy lại backend, dùng cấu hình local theo README.
 4. Không rollback database cửa hàng đang dùng. Test round-trip chỉ thao tác trên database ngẫu nhiên do chính test tạo.
 5. Khi thay đổi schema/RLS, cấu hình lại biến test DB và chạy tenant isolation test bằng runtime role `fnb_app`.
-6. Rà soát SQLC query generation và mở rộng việc dùng query code sinh cho session/refresh và các repository nghiệp vụ.
-7. Bổ sung CI cho build và integration tests; cập nhật tài liệu theo kết quả thực sự. Trước khi nối/refactor frontend, tạo visual baseline theo UI freeze đã được yêu cầu.
+6. Đọc [API contract](./catalog-customers-api.md) và [ADR-002](./ADR-002-catalog-customers.md) trước khi viết frontend adapter. Không gửi tenant_id/store_id/SKU; không gửi base64 vào image_url.
+7. Sau khi người dùng chủ động commit/push, kiểm tra workflow CI PostgreSQL 16. Không báo CI xanh khi chưa chạy. Trước khi nối/refactor frontend, tạo visual baseline 7 routes ở desktop/mobile theo UI freeze.
 
 ### P1 — Hoàn thiện SQLC và data access
 
@@ -51,9 +56,9 @@ Test vòng đời authentication nằm tại [apps/api/tests/auth_integration_te
 
 ### P2 — Tiếp tục nghiệp vụ theo phạm vi được duyệt
 
-- Chưa triển khai đầy đủ POS, checkout, payment provider, inventory hoặc API nghiệp vụ sản phẩm/khách hàng.
+- Chưa triển khai đầy đủ POS, checkout, payment provider, inventory hoặc upload ảnh. API sản phẩm/khách hàng đã có; frontend HTTP integration chưa có.
 - Trước khi làm order/payment, thiết kế transaction, idempotency và lưu `order_items` dạng record chuẩn hóa; không lưu danh sách món thành chuỗi hiển thị.
-- Chỉ nối frontend sau khi có yêu cầu rõ ràng và phải giữ nguyên UI/CSS hiện tại theo quy tắc UI freeze.
+- Tiếp theo tạo visual baseline rồi nối frontend từng module theo kế hoạch đã duyệt, giữ nguyên UI/CSS; không thay toàn bộ localStorage khi chưa có adapter/mock mode và kiểm tra hồi quy.
 - Những phần nghiệp vụ cần đổi UI phải được nêu đề xuất và chờ người dùng duyệt trước.
 
 ## File quan trọng để bắt đầu
@@ -62,6 +67,11 @@ Test vòng đời authentication nằm tại [apps/api/tests/auth_integration_te
 - Authentication/middleware: [apps/api/internal/modules/auth/auth.go](../apps/api/internal/modules/auth/auth.go)
 - Tenant transaction helper: [apps/api/internal/database/pool.go](../apps/api/internal/database/pool.go)
 - PostgreSQL migration: [apps/api/migrations/00001_foundation.sql](../apps/api/migrations/00001_foundation.sql)
+- Catalog/customer migration: [00002_catalog_customers.sql](../apps/api/migrations/00002_catalog_customers.sql)
+- Domain modules: [product](../apps/api/internal/modules/product), [customer](../apps/api/internal/modules/customer)
+- HTTP integration test: [catalog_integration_test.go](../apps/api/tests/catalog_integration_test.go)
+- API contract: [catalog-customers-api.md](./catalog-customers-api.md)
+- Backend CI: [api.yml](../.github/workflows/api.yml)
 - Tenant isolation test: [apps/api/internal/database/tenant_isolation_test.go](../apps/api/internal/database/tenant_isolation_test.go)
 - SQLC config và queries: [apps/api/sqlc.yaml](../apps/api/sqlc.yaml), [apps/api/sql/auth.sql](../apps/api/sql/auth.sql)
 - Docker image/Compose: [apps/api/Dockerfile](../apps/api/Dockerfile), [deploy/docker-compose.yml](../deploy/docker-compose.yml)
