@@ -1,3 +1,4 @@
+import { prototypeStorage } from '../../api/prototypeStorage'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { ArrowDownToLine, Banknote, Check, ChevronDown, CircleHelp, Clock3, CreditCard, Minus, Plus, QrCode, ReceiptText, Search, ShoppingBag, Trash2, Wifi, WifiOff, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
@@ -12,7 +13,7 @@ const categoryColors: Record<string, string> = { 'Cà phê': '#f2e5d6', 'Trà': 
 
 function loadCatalogProducts(): Product[] {
   try {
-    const saved: unknown = JSON.parse(localStorage.getItem('fnb-management:menu-items') ?? 'null')
+    const saved: unknown = JSON.parse(prototypeStorage.getItem('fnb-management:menu-items') ?? 'null')
     if (!Array.isArray(saved) || saved.length === 0) return products
     return saved.filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null)
       .filter((item) => item.visible !== false && item.status !== 'Tạm hết')
@@ -50,14 +51,14 @@ export function POS() {
   useEffect(() => { syncActiveDraft() }, [items, discount, note, customer, table, orderCode, activeDraftId, syncActiveDraft])
   const [rooms] = useState(() => {
     try {
-      const records: unknown = JSON.parse(localStorage.getItem('fnb-management:rooms') ?? '[]')
+      const records: unknown = JSON.parse(prototypeStorage.getItem('fnb-management:rooms') ?? '[]')
       const names = Array.isArray(records) ? records.map((record) => typeof record === 'object' && record !== null && 'name' in record ? String(record.name) : '').filter(Boolean) : []
       return names.length ? names : ['Mang về', 'Bàn 01', 'Bàn 02', 'Bàn 03']
     } catch { return ['Mang về', 'Bàn 01', 'Bàn 02', 'Bàn 03'] }
   })
   const [customers, setCustomers] = useState(() => {
     try {
-      const records: unknown = JSON.parse(localStorage.getItem('fnb-management:customers') ?? '[]')
+      const records: unknown = JSON.parse(prototypeStorage.getItem('fnb-management:customers') ?? '[]')
       const names = Array.isArray(records) ? records.map((record) => typeof record === 'object' && record !== null && 'name' in record ? String(record.name) : '').filter(Boolean) : []
       return ['Khách lẻ', 'Anh Nam', 'Chị Như', ...names.filter((name) => !['Anh Nam', 'Chị Như'].includes(name))]
     } catch { return ['Khách lẻ', 'Anh Nam', 'Chị Như'] }
@@ -68,7 +69,7 @@ export function POS() {
   const debt = Math.max(0, total - paidInCart)
   const customerDebt = useMemo(() => {
     try {
-      const saved: unknown = JSON.parse(localStorage.getItem('fnb-management:invoices') ?? 'null')
+      const saved: unknown = JSON.parse(prototypeStorage.getItem('fnb-management:invoices') ?? 'null')
       if (!Array.isArray(saved)) return 0
       return saved.filter((row): row is Record<string, unknown> => typeof row === 'object' && row !== null && String(row.customer ?? '') === customer).reduce((sum, row) => sum + Math.max(0, Number(row.due ?? row.amount ?? 0) - Number(row.paid ?? 0)), 0)
     } catch { return 0 }
@@ -151,7 +152,7 @@ export function POS() {
       {paymentOptionsOpen && <PaymentOptions onClose={() => setPaymentOptionsOpen(false)} onSelect={(kind) => { setPaymentOptionsOpen(false); beginPayment(kind) }} />}
       {temporaryOpen && <DraftOrdersDialog drafts={drafts} onClose={() => setTemporaryOpen(false)} onOpen={(id) => { openDraft(id); setTemporaryOpen(false); setCatalogTab('menu') }} />}
       {notice && <div className="toast" role="status">{notice}</div>}
-      {newCustomerOpen && <NewCustomerDialog onClose={() => setNewCustomerOpen(false)} onSave={(name, phone) => { setCustomers((current) => [...current, name]); setCustomer(name); const saved = JSON.parse(localStorage.getItem('fnb-management:customers') ?? 'null'); const rows = Array.isArray(saved) ? saved : managementModules.find((module) => module.id === 'customers')?.rows ?? []; localStorage.setItem('fnb-management:customers', JSON.stringify([{ name, phone, segment: 'Khách mới', points: 0, orders: 0, spent: 0 }, ...rows])); setNewCustomerOpen(false) }} />}
+      {newCustomerOpen && <NewCustomerDialog onClose={() => setNewCustomerOpen(false)} onSave={(name, phone) => { setCustomers((current) => [...current, name]); setCustomer(name); const saved = JSON.parse(prototypeStorage.getItem('fnb-management:customers') ?? 'null'); const rows = Array.isArray(saved) ? saved : managementModules.find((module) => module.id === 'customers')?.rows ?? []; prototypeStorage.setItem('fnb-management:customers', JSON.stringify([{ name, phone, segment: 'Khách mới', points: 0, orders: 0, spent: 0 }, ...rows])); setNewCustomerOpen(false) }} />}
       {receipt && <div className="modal-backdrop" role="presentation"><section className="modal-card receipt-card" role="dialog" aria-modal="true"><button className="modal-close" type="button" aria-label="Đóng" onClick={() => setReceipt('')}><X size={18} /></button><span className="receipt-check"><Check size={22} /></span><h2>{offline ? 'Đơn hàng đã lưu offline' : 'Đơn demo đã xử lý'}</h2><p>{offline ? <>Mã đơn <strong>#{receipt}</strong> · Đang chờ đồng bộ cục bộ</> : receipt.startsWith('MOC-') ? <>Mã đơn <strong>#{receipt}</strong></> : receipt}</p><small className="receipt-demo-note">Đang dùng dữ liệu demo; chưa kết nối API backend.</small><button className="button button-primary receipt-done" type="button" onClick={() => setReceipt('')}>Hoàn tất</button></section></div>}
       {ordersOpen && <OrdersDialog onClose={() => setOrdersOpen(false)} />}
     </div>
@@ -164,7 +165,7 @@ function appendManagementRecord(moduleId: string, prefix: string, digits: number
   const key = `fnb-management:${moduleId}`
   let rows = module.rows
   try {
-    const saved: unknown = JSON.parse(localStorage.getItem(key) ?? 'null')
+    const saved: unknown = JSON.parse(prototypeStorage.getItem(key) ?? 'null')
     if (Array.isArray(saved)) rows = saved as ManagementRow[]
   } catch { /* use the bundled demo records */ }
   const highest = rows.reduce((max, row) => {
@@ -173,7 +174,7 @@ function appendManagementRecord(moduleId: string, prefix: string, digits: number
     return Number.isFinite(number) ? Math.max(max, number) : max
   }, 0)
   const code = `${prefix}${String(highest + 1).padStart(digits, '0')}`
-  localStorage.setItem(key, JSON.stringify([{ ...values, code, __id: crypto.randomUUID() }, ...rows]))
+  prototypeStorage.setItem(key, JSON.stringify([{ ...values, code, __id: crypto.randomUUID() }, ...rows]))
   return code
 }
 
@@ -197,7 +198,7 @@ type PosInvoice = { code: string; time: string; customer: string; table: string;
 function loadInvoiceOrders(): PosInvoice[] {
   const sample = recentOrders.map((order) => ({ ...order, discount: 0, paid: order.status === 'Đã thanh toán' ? order.amount : 0 }))
   try {
-    const saved: unknown = JSON.parse(localStorage.getItem('fnb-management:invoices') ?? 'null')
+    const saved: unknown = JSON.parse(prototypeStorage.getItem('fnb-management:invoices') ?? 'null')
     if (!Array.isArray(saved)) return sample
     const invoices = saved.filter((value): value is Record<string, unknown> => typeof value === 'object' && value !== null).map((row): PosInvoice => {
       let items: PosInvoice['items'] = []

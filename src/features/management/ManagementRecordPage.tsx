@@ -1,49 +1,11 @@
+import { loadRows, storageKey } from '../../api/localManagement'
+import { prototypeStorage } from '../../api/prototypeStorage'
 import { Fragment, useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react'
 import { ChevronLeft, ChevronRight, Download, PackagePlus, Pencil, Plus, Search, SlidersHorizontal, X } from 'lucide-react'
 import { formatCurrency } from '../../services/mockData'
 import { managementModules, type ManagementModule, type ManagementRow, type ManagementValue } from './moduleConfig'
 
 const pageSize = 6
-const storageKey = (moduleId: string) => `fnb-management:${moduleId}`
-
-function loadRows(module: ManagementModule): ManagementRow[] {
-  try {
-    const saved = localStorage.getItem(storageKey(module.id))
-    if (saved) return migrateRows(module.id, JSON.parse(saved) as ManagementRow[])
-  } catch {
-    return module.rows
-  }
-  return module.rows
-}
-
-function migrateRows(moduleId: string, rows: ManagementRow[]) {
-  if (!Array.isArray(rows)) return []
-  if (moduleId === 'menu-items') return rows.map((row, index) => {
-    const currentCode = String(row.code ?? '')
-    return { ...row,
-      code: /^M\d{5}$/.test(currentCode) ? currentCode : `M${String(index + 1).padStart(5, '0')}`,
-      productType: row.productType ?? (row.category === 'Retail SKU' ? 'Hàng hóa thường' : 'Chế biến'),
-      menuType: row.menuType ?? (row.category === 'Bánh' || row.category === 'Đồ ăn' ? 'Đồ ăn' : 'Đồ uống'),
-      visible: row.visible ?? true, extra: row.extra ?? false, points: row.points ?? true,
-      image: row.image ?? '', attributes: row.attributes ?? '[]', units: row.units ?? '[]',
-    }
-  })
-  if (moduleId === 'invoices') return rows.map((row) => {
-    const oldCode = String(row.code ?? '')
-    const code = oldCode.startsWith('MOC-') ? `HD${oldCode.slice(4).padStart(6, '0')}` : oldCode
-    const amount = Number(row.amount ?? 0)
-    return { ...row, code, table: row.table ?? 'Mang về', order: row.order ?? '', items: row.items ?? '', amount, discount: row.discount ?? 0, due: row.due ?? amount, paid: row.paid ?? (row.status === 'Đã thanh toán' ? amount : 0), date: row.date ?? '', branch: row.branch ?? 'Mộc Store · Quận 1', receiver: row.receiver ?? 'Thu ngân A', creator: row.creator ?? 'Thu ngân A' }
-  })
-  if (moduleId === 'cashbook') return rows.map((row) => {
-    const oldType = String(row.type ?? '')
-    const oldCode = String(row.code ?? '')
-    const amountText = oldCode.match(/\d+/)?.[0] ?? '1'
-    const code = oldCode.startsWith('PT-') ? `TTHD${amountText.padStart(6, '0')}` : oldCode.startsWith('PC-') ? `CCHD${amountText.padStart(6, '0')}` : oldCode
-    return { ...row, code, status: row.status ?? 'Đã thanh toán', voucher: row.voucher ?? (oldType === 'Chi' ? 'Phiếu Chi' : 'Phiếu Thu'), category: row.category ?? row.note ?? '', payerGroup: row.payerGroup ?? (oldType === 'Thu' ? 'Khách hàng' : 'Nhà cung cấp'), payer: row.payer ?? '', method: row.method ?? 'Tiền mặt', branch: row.branch ?? 'Mộc Store · Quận 1', creator: row.creator ?? 'Thu ngân A', date: row.date ?? '' }
-  })
-  return rows
-}
-
 function displayValue(value: ManagementValue, type?: string) {
   if (type === 'currency' && typeof value === 'number') return formatCurrency(value)
   if (typeof value === 'boolean') return value ? 'Có' : 'Không'
@@ -105,27 +67,27 @@ function PurchaseWorkspace() {
   const [supplier, setSupplier] = useState('')
   const [supplierCreateOpen, setSupplierCreateOpen] = useState(false)
   const [supplierOptions, setSupplierOptions] = useState<ManagementRow[]>(() => {
-    try { const saved: unknown = JSON.parse(localStorage.getItem(storageKey('suppliers')) ?? 'null'); return Array.isArray(saved) ? saved as ManagementRow[] : managementModules.find((item) => item.id === 'suppliers')?.rows ?? [] } catch { return managementModules.find((item) => item.id === 'suppliers')?.rows ?? [] }
+    try { const saved: unknown = JSON.parse(prototypeStorage.getItem(storageKey('suppliers')) ?? 'null'); return Array.isArray(saved) ? saved as ManagementRow[] : managementModules.find((item) => item.id === 'suppliers')?.rows ?? [] } catch { return managementModules.find((item) => item.id === 'suppliers')?.rows ?? [] }
   })
   const [branch, setBranch] = useState('Mộc Store · Quận 1')
   const [note, setNote] = useState('')
   const [notice, setNotice] = useState('')
   const [history, setHistory] = useState<ManagementRow[]>(() => {
-    try { const saved: unknown = JSON.parse(localStorage.getItem(storageKey('purchases')) ?? 'null'); return Array.isArray(saved) ? saved as ManagementRow[] : managementModules.find((item) => item.id === 'purchases')?.rows ?? [] } catch { return [] }
+    try { const saved: unknown = JSON.parse(prototypeStorage.getItem(storageKey('purchases')) ?? 'null'); return Array.isArray(saved) ? saved as ManagementRow[] : managementModules.find((item) => item.id === 'purchases')?.rows ?? [] } catch { return [] }
   })
   const [catalog, setCatalog] = useState<ManagementRow[]>(() => {
-    try { const saved: unknown = JSON.parse(localStorage.getItem(storageKey('menu-items')) ?? 'null'); return Array.isArray(saved) ? saved as ManagementRow[] : managementModules.find((item) => item.id === 'menu-items')?.rows ?? [] } catch { return [] }
+    try { const saved: unknown = JSON.parse(prototypeStorage.getItem(storageKey('menu-items')) ?? 'null'); return Array.isArray(saved) ? saved as ManagementRow[] : managementModules.find((item) => item.id === 'menu-items')?.rows ?? [] } catch { return [] }
   })
   const matches = catalog.filter((product) => `${product.name} ${product.code}`.toLocaleLowerCase('vi').includes(query.toLocaleLowerCase('vi')) && (categoryFilter === 'Tất cả nhóm hàng' || product.category === categoryFilter) && !lines.some((line) => line.product.code === product.code))
   const addProduct = (product: ManagementRow) => setLines((current) => [...current, { product, quantity: 1, cost: Number(product.cost ?? 0) }])
   const total = lines.reduce((sum, line) => sum + line.quantity * line.cost, 0)
   const saveVoucher = () => {
     if (!lines.length) return
-    const saved = JSON.parse(localStorage.getItem(storageKey('purchases')) ?? 'null') as ManagementRow[] | null
+    const saved = JSON.parse(prototypeStorage.getItem(storageKey('purchases')) ?? 'null') as ManagementRow[] | null
     const history = Array.isArray(saved) ? saved : managementModules.find((item) => item.id === 'purchases')?.rows ?? []
     const code = `PN-${String(history.length + 87).padStart(4, '0')}`
     const record: ManagementRow = { code, date: new Date().toLocaleDateString('vi-VN'), supplier: supplier || 'Chưa chọn', branch, items: lines.length, amount: total, status: 'Chờ thanh toán', detail: JSON.stringify(lines.map((line) => ({ name: line.product.name, sku: line.product.code, quantity: line.quantity, cost: line.cost }))), note }
-    const next = [record, ...history]; localStorage.setItem(storageKey('purchases'), JSON.stringify(next)); setHistory(next)
+    const next = [record, ...history]; prototypeStorage.setItem(storageKey('purchases'), JSON.stringify(next)); setHistory(next)
     setNotice(`Đã lưu phiếu nhập ${code} trong dữ liệu demo.`); setLines([]); setCreating(false); window.setTimeout(() => setNotice(''), 3000)
   }
   const saveNewProduct = (event: FormEvent<HTMLFormElement>) => {
@@ -133,14 +95,14 @@ function PurchaseWorkspace() {
     const data = new FormData(event.currentTarget)
     const code = nextCode(catalog, 'M', 5)
     const product: ManagementRow = { code, name: String(data.get('name') ?? ''), category: String(data.get('category') ?? 'Khác'), productType: 'Hàng hóa thường', menuType: 'Khác', price: Number(data.get('price')), cost: Number(data.get('cost')), stock: 0, baseUnit: 'Cái', visible: true, extra: false, points: true, attributes: '[]', units: '[]' }
-    const next = [product, ...catalog]; localStorage.setItem(storageKey('menu-items'), JSON.stringify(next)); setCatalog(next); setShowAll(true); setCreateProduct(false); addProduct(product)
+    const next = [product, ...catalog]; prototypeStorage.setItem(storageKey('menu-items'), JSON.stringify(next)); setCatalog(next); setShowAll(true); setCreateProduct(false); addProduct(product)
   }
   const saveNewSupplier = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const data = new FormData(event.currentTarget)
     const record: ManagementRow = { name: String(data.get('name') ?? '').trim(), contact: String(data.get('contact') ?? '').trim(), phone: String(data.get('phone') ?? '').trim(), address: String(data.get('address') ?? '').trim(), debt: 0, __id: crypto.randomUUID() }
     const next = [record, ...supplierOptions]
-    localStorage.setItem(storageKey('suppliers'), JSON.stringify(next))
+    prototypeStorage.setItem(storageKey('suppliers'), JSON.stringify(next))
     setSupplierOptions(next)
     setSupplier(String(record.name))
     setSupplierCreateOpen(false)
@@ -174,7 +136,7 @@ function RecordWorkspace({ module }: { module: ManagementModule }) {
   const [branchFilter, setBranchFilter] = useState('Tất cả chi nhánh')
 
   useEffect(() => {
-    try { localStorage.setItem(storageKey(module.id), JSON.stringify(rows)) } catch { setNotice('Không thể lưu dữ liệu demo trên thiết bị.') }
+    try { prototypeStorage.setItem(storageKey(module.id), JSON.stringify(rows)) } catch { setNotice('Không thể lưu dữ liệu demo trên thiết bị.') }
   }, [module.id, rows])
 
   const filteredRows = useMemo(() => {
@@ -279,7 +241,7 @@ const bankList = ['Vietcombank', 'VietinBank', 'BIDV', 'Agribank', 'Techcombank'
 
 function getRoomNames() {
   try {
-    const records: unknown = JSON.parse(localStorage.getItem('fnb-management:rooms') ?? '[]')
+    const records: unknown = JSON.parse(prototypeStorage.getItem('fnb-management:rooms') ?? '[]')
     const names = Array.isArray(records) ? records.map((record) => typeof record === 'object' && record !== null && 'name' in record ? String(record.name) : '').filter(Boolean) : []
     return names.length ? names : ['Mang về', 'Bàn 01', 'Bàn 02', 'Bàn 03']
   } catch { return ['Mang về', 'Bàn 01', 'Bàn 02', 'Bàn 03'] }
@@ -311,7 +273,7 @@ type ProductUnit = { name: string; ratio: number; cost: number; price: number }
 function ProductEditor({ initial, nextProductCode, onCancel, onSave }: { initial: ManagementRow | null; nextProductCode: string; onCancel: () => void; onSave: (values: ManagementRow) => void }) {
   const [productType, setProductType] = useState(String(initial?.productType ?? 'Hàng hóa thường'))
   const [categories, setCategories] = useState<string[]>(() => {
-    try { return [...new Set(['Cà phê', 'Cacao', 'Trà', 'Bia', 'Đồ ăn', 'Khác', ...JSON.parse(localStorage.getItem('fnb-product-groups') ?? '[]') as string[]])] } catch { return ['Cà phê', 'Cacao', 'Trà', 'Bia', 'Đồ ăn', 'Khác'] }
+    try { return [...new Set(['Cà phê', 'Cacao', 'Trà', 'Bia', 'Đồ ăn', 'Khác', ...JSON.parse(prototypeStorage.getItem('fnb-product-groups') ?? '[]') as string[]])] } catch { return ['Cà phê', 'Cacao', 'Trà', 'Bia', 'Đồ ăn', 'Khác'] }
   })
   const [newCategory, setNewCategory] = useState('')
   const [selectedCategory, setSelectedCategory] = useState(String(initial?.category ?? 'Cà phê'))
@@ -333,7 +295,7 @@ function ProductEditor({ initial, nextProductCode, onCancel, onSave }: { initial
     if (!value) return
     const updated = [...new Set([...categories, value])]
     setCategories(updated); setSelectedCategory(value); setNewCategory('')
-    try { localStorage.setItem('fnb-product-groups', JSON.stringify(updated.filter((item) => !['Cà phê', 'Cacao', 'Trà', 'Bia', 'Đồ ăn', 'Khác'].includes(item)))) } catch { setError('Không thể lưu nhóm hàng mới trên thiết bị.') }
+    try { prototypeStorage.setItem('fnb-product-groups', JSON.stringify(updated.filter((item) => !['Cà phê', 'Cacao', 'Trà', 'Bia', 'Đồ ăn', 'Khác'].includes(item)))) } catch { setError('Không thể lưu nhóm hàng mới trên thiết bị.') }
   }
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()

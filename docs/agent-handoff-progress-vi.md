@@ -7,6 +7,8 @@
 
 ## Tóm tắt tiến độ
 
+**Cập nhật frontend:** Đã chuẩn bị HTTP repositories/auth/query hooks, tách storage prototype và tạo 14 visual baselines. Unit/typecheck/build/visual local đã PASS; UI/CSS giữ nguyên. Form chưa nối API và chưa có login/auth guard vì đang chờ duyệt các thay đổi nội dung/trường chỉ đọc theo UI freeze. Đọc [frontend-api-progress-vi.md](./frontend-api-progress-vi.md) để tiếp tục; không hướng dẫn bật HTTP như một bản tích hợp hoàn chỉnh.
+
 Đã thêm nền tảng API Go theo hướng modular monolith, migration PostgreSQL, authentication, tenant isolation bằng RLS, API CRUD Món/Nhóm hàng/Khách hàng/Nhóm khách và workflow CI backend. Frontend hiện có không bị chỉnh sửa, vẫn dùng dữ liệu prototype. PostgreSQL native là quy trình local chính; Docker Compose chỉ tùy chọn.
 
 Báo cáo chi tiết về phần đã triển khai có tại [backend-foundation-report.md](./backend-foundation-report.md). Hướng dẫn cài đặt và chạy API có tại [apps/api/README.md](../apps/api/README.md).
