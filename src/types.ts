@@ -8,6 +8,7 @@ export type Product = {
   minimum: number
   color: string
   image?: string
+  baseUnit?: string
   productType?: 'Hàng hóa thường' | 'Chế biến'
   attributes?: { name: string; value: string }[]
   units?: { name: string; ratio: number; cost?: number; price?: number }[]
