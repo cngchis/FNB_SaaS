@@ -26,6 +26,8 @@ psql "$MIGRATIONS_DATABASE_URL" -v ON_ERROR_STOP=1 -c 'CREATE ROLE fnb_app LOGIN
 cd "$task_root/apps/api"
 task_goose="$(go env GOPATH)/bin/goose"
 "$task_goose" -dir migrations postgres "$MIGRATIONS_DATABASE_URL" up
+"$task_goose" -dir migrations postgres "$MIGRATIONS_DATABASE_URL" down
+"$task_goose" -dir migrations postgres "$MIGRATIONS_DATABASE_URL" up
 export BOOTSTRAP_TENANT_NAME='Browser Test Tenant' BOOTSTRAP_TENANT_SLUG="web-$(openssl rand -hex 6)"
 export BOOTSTRAP_STORE_NAME='Browser Test Store' BOOTSTRAP_STORE_SLUG='test-store'
 export BOOTSTRAP_OWNER_NAME='Browser Test Owner' BOOTSTRAP_OWNER_EMAIL='owner@example.test'
@@ -47,6 +49,11 @@ SQL
 export WEB_TEST_CASHIER_EMAIL='cashier@example.test'
 export JWT_SECRET="$(openssl rand -hex 32)" HTTP_ADDRESS='127.0.0.1:18088' WEB_ORIGIN='http://127.0.0.1:5189'
 export API_TEST_BASE_URL='http://127.0.0.1:18088'
+if [ "${RUN_API_TESTS:-false}" = 'true' ]; then
+  export TEST_DATABASE_ADMIN_URL="$MIGRATIONS_DATABASE_URL" TEST_DATABASE_URL="$DATABASE_URL"
+  unset TEST_DATABASE_ADMIN_PASSWORD TEST_DATABASE_PASSWORD
+  go test -race ./... -count=1
+fi
 go build -o "$task_dir/api" ./cmd/api
 "$task_dir/api" >"$task_dir/api.log" 2>&1 &
 task_api_pid=$!

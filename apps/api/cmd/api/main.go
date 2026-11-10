@@ -18,7 +18,9 @@ import (
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/middleware"
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/auth"
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/customer"
+	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/pos"
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/product"
+	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/room"
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/shared/httpx"
 )
 
@@ -74,6 +76,8 @@ func run() error {
 	secured := api.Group("", auth.Authenticate(pool, cfg.JWTSecret))
 	product.RegisterRoutes(secured, pool)
 	customer.RegisterRoutes(secured, pool)
+	room.RegisterRoutes(secured, pool)
+	pos.RegisterRoutes(secured, pool)
 	api.GET("/me", auth.Authenticate(pool, cfg.JWTSecret), func(c *gin.Context) {
 		identity, ok := auth.CurrentIdentity(c)
 		if !ok {

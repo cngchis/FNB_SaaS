@@ -971,3 +971,20 @@ kbd { flex: 0 0 auto; padding: 2px 4px; color: #8e8e93; border: 1px solid #e5e5e
 .auth-card .form-label { margin-top: 16px; }
 .auth-page .button-primary { background: #16794b; border-color: #16794b; color: #fff; }
 .auth-page .button-primary:hover { background: #12633d; border-color: #12633d; }
+
+/* POS workflow toolbar and order tabs requested on 2026-11-10. */
+.pos-workflow-tabs { align-items: center; flex-wrap: nowrap; overflow-x: auto; gap: 8px; padding-bottom: 10px; }
+.pos-workflow-tabs .pos-search { flex: 0 0 250px; min-width: 180px; margin: 0; }
+.pos-workflow-tabs > button { flex: 0 0 auto; white-space: nowrap; }
+.pos-order-tab { display: flex; flex: 0 0 auto; align-items: center; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: 7px; background: #fff; }
+.pos-order-tab.active { border-color: var(--accent-blue); background: var(--accent-blue-soft); color: var(--accent-blue); }
+.pos-order-tab button { min-height: 30px; padding: 0 8px; border: 0; border-radius: 5px; background: transparent; cursor: pointer; font-size: 10px; color: inherit; white-space: nowrap; }
+.pos-order-tab button:last-child { display: grid; place-items: center; padding: 0 5px; }
+.pos-order-tab button:disabled { opacity: .5; cursor: wait; }
+button.mobile-cart-handle { padding: 0; border: 0; cursor: pointer; }
+.mobile-cart-summary [role="button"] { cursor: pointer; }
+@media (max-width: 720px) {
+  .pos-workflow-tabs .pos-search { flex-basis: 200px; }
+  .pos-order-tab button { min-height: 27px; padding: 0 7px; font-size: 9px; }
+  .cart-panel.expanded .mobile-cart-handle { flex-shrink: 0; min-height: 6px; }
+}

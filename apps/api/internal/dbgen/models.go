@@ -8,6 +8,16 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type ApiRequest struct {
+	TenantID    pgtype.UUID        `json:"tenant_id"`
+	StoreID     pgtype.UUID        `json:"store_id"`
+	Operation   string             `json:"operation"`
+	Key         string             `json:"key"`
+	RequestHash string             `json:"request_hash"`
+	Response    []byte             `json:"response"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
 type AuthSession struct {
 	ID               pgtype.UUID        `json:"id"`
 	TenantID         pgtype.UUID        `json:"tenant_id"`
@@ -52,6 +62,16 @@ type EntityCounter struct {
 	Value    int64       `json:"value"`
 }
 
+type Invoice struct {
+	ID        pgtype.UUID        `json:"id"`
+	TenantID  pgtype.UUID        `json:"tenant_id"`
+	StoreID   pgtype.UUID        `json:"store_id"`
+	OrderID   pgtype.UUID        `json:"order_id"`
+	Code      string             `json:"code"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Membership struct {
 	ID        pgtype.UUID        `json:"id"`
 	TenantID  pgtype.UUID        `json:"tenant_id"`
@@ -86,6 +106,9 @@ type Order struct {
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
+	RoomID         pgtype.UUID        `json:"room_id"`
+	Note           string             `json:"note"`
+	Version        int64              `json:"version"`
 }
 
 type OrderItem struct {
@@ -101,6 +124,36 @@ type OrderItem struct {
 	UnitPriceVnd int64              `json:"unit_price_vnd"`
 	LineTotalVnd int64              `json:"line_total_vnd"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	LineKey      string             `json:"line_key"`
+	UnitName     string             `json:"unit_name"`
+	Attributes   []byte             `json:"attributes"`
+	UnitCostVnd  pgtype.Int8        `json:"unit_cost_vnd"`
+}
+
+type OrderRound struct {
+	ID        pgtype.UUID        `json:"id"`
+	TenantID  pgtype.UUID        `json:"tenant_id"`
+	StoreID   pgtype.UUID        `json:"store_id"`
+	OrderID   pgtype.UUID        `json:"order_id"`
+	Revision  int64              `json:"revision"`
+	CreatedBy pgtype.UUID        `json:"created_by"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type OrderRoundItem struct {
+	ID            pgtype.UUID        `json:"id"`
+	TenantID      pgtype.UUID        `json:"tenant_id"`
+	StoreID       pgtype.UUID        `json:"store_id"`
+	RoundID       pgtype.UUID        `json:"round_id"`
+	ProductID     pgtype.UUID        `json:"product_id"`
+	LineKey       string             `json:"line_key"`
+	ProductName   string             `json:"product_name"`
+	QuantityDelta int64              `json:"quantity_delta"`
+	UnitPriceVnd  int64              `json:"unit_price_vnd"`
+	UnitCostVnd   pgtype.Int8        `json:"unit_cost_vnd"`
+	UnitName      string             `json:"unit_name"`
+	Attributes    []byte             `json:"attributes"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 }
 
 type Payment struct {
@@ -199,6 +252,17 @@ type Role struct {
 type RolePermission struct {
 	RoleSlug      string `json:"role_slug"`
 	PermissionKey string `json:"permission_key"`
+}
+
+type Room struct {
+	ID        pgtype.UUID        `json:"id"`
+	TenantID  pgtype.UUID        `json:"tenant_id"`
+	StoreID   pgtype.UUID        `json:"store_id"`
+	Name      string             `json:"name"`
+	Note      string             `json:"note"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
 }
 
 type Store struct {

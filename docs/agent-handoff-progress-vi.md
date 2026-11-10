@@ -1,5 +1,7 @@
 # Báo cáo tiến độ và bàn giao cho agent tiếp theo
 
+> **Cập nhật mới nhất:** Phòng/Bàn và POS tiền mặt đã nối API. Xem [tiến độ POS](./rooms-pos-progress-vi.md) trước khi đọc các mục lịch sử bên dưới; những ghi chú “POS chưa triển khai” chỉ phản ánh giai đoạn trước.
+
 **Cập nhật:** 10/11/2026
 
 **Phạm vi hiện tại:** Backend foundation, database và API Món/Khách hàng cho FNB SaaS.

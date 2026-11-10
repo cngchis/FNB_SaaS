@@ -3,7 +3,7 @@ import type { ManagementRow } from '../features/management/moduleConfig'
 import type { ProductDTO, ProductInput, CustomerDTO, CustomerInput, GroupDTO, GroupInput } from './catalog'
 import { ApiError } from './http'
 
-export const connectedModules = new Set(['menu-items', 'customers', 'customer-groups'])
+export const connectedModules = new Set(['menu-items', 'customers', 'customer-groups', 'rooms'])
 export function productRow(item: ProductDTO): ManagementRow {
   return {
     __id: item.id, code: item.sku, name: item.name, category: item.category_name ?? '',
@@ -65,6 +65,7 @@ export function errorMessage(error: unknown): string {
     if (error.status === 401) return 'Phiên đăng nhập không hợp lệ hoặc thông tin đăng nhập chưa đúng.'
     if (error.status === 403) return 'Tài khoản không có quyền thực hiện thao tác này.'
     if (error.status === 404) return 'Bản ghi không còn tồn tại hoặc không thuộc cửa hàng hiện tại.'
+    if (error.status === 409 && error.code === 'state_conflict') return 'Đơn hàng hoặc bàn đã thay đổi. Đóng tab rồi mở lại đơn đã lưu để cập nhật.'
     if (error.status === 409) return 'Tên hoặc mã đã tồn tại. Vui lòng kiểm tra lại.'
     if (error.status === 422) return 'Dữ liệu chưa hợp lệ. Kiểm tra tên, giá, nhóm và đơn vị quy đổi.'
     return 'Không thể tải hoặc lưu dữ liệu trên server. Vui lòng thử lại.'

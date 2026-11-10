@@ -19,7 +19,9 @@ import (
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/config"
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/auth"
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/customer"
+	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/pos"
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/product"
+	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/room"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -59,6 +61,7 @@ type catalogRecord struct {
 	} `json:"units"`
 }
 type moduleFixture struct {
+	otherStoreToken                     string
 	base                                string
 	client                              *http.Client
 	admin                               *pgxpool.Pool
@@ -188,6 +191,8 @@ func moduleTestFixture(t *testing.T) moduleFixture {
 	secured := api.Group("", auth.Authenticate(runtime, cfg.JWTSecret))
 	product.RegisterRoutes(secured, runtime)
 	customer.RegisterRoutes(secured, runtime)
+	room.RegisterRoutes(secured, runtime)
+	pos.RegisterRoutes(secured, runtime)
 	server = httptest.NewServer(engine)
 	f.base = server.URL
 	f.client = server.Client()
@@ -217,8 +222,19 @@ func moduleTestFixture(t *testing.T) moduleFixture {
 			t.Fatal(err)
 		}
 		var session tokenResponse
-		authRequest(t, f.client, f.base, http.MethodPost, "/api/v1/auth/login", "", map[string]string{"tenant_slug": slug, "email": email, "password": password}, 200, &session)
+		authRequest(t, f.client, f.base, http.MethodPost, "/api/v1/auth/login", "", map[string]string{"tenant_slug": slug, "email": email, "password": password, "store_id": account.store}, 200, &session)
 		*account.target = session.Data.AccessToken
+		if i == 0 {
+			if _, err := admin.Exec(ctx, "INSERT INTO membership_stores(tenant_id,membership_id,store_id) VALUES($1,$2,$3)", account.tenant, mid, f.otherStore); err != nil {
+				t.Fatal(err)
+			}
+			var second tokenResponse
+			authRequest(t, f.client, f.base, http.MethodPost, "/api/v1/auth/login", "", map[string]string{"tenant_slug": slug, "email": email, "password": password, "store_id": f.otherStore}, 200, &second)
+			f.otherStoreToken = second.Data.AccessToken
+		}
+	}
+	if _, err := admin.Exec(ctx, "INSERT INTO payment_methods(tenant_id,store_id,name,method_type) SELECT tenant_id,id,'Cash','cash' FROM stores"); err != nil {
+		t.Fatal(err)
 	}
 	return f
 }

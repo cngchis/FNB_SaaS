@@ -21,10 +21,12 @@ type Querier interface {
 	CreateProductAttribute(ctx context.Context, arg CreateProductAttributeParams) error
 	CreateProductCategory(ctx context.Context, arg CreateProductCategoryParams) (ProductCategory, error)
 	CreateProductUnit(ctx context.Context, arg CreateProductUnitParams) error
+	CreateRoom(ctx context.Context, arg CreateRoomParams) (Room, error)
 	DeleteCustomer(ctx context.Context, arg DeleteCustomerParams) (int64, error)
 	DeleteCustomerGroup(ctx context.Context, arg DeleteCustomerGroupParams) (int64, error)
 	DeleteProduct(ctx context.Context, arg DeleteProductParams) (int64, error)
 	DeleteProductCategory(ctx context.Context, arg DeleteProductCategoryParams) (int64, error)
+	DeleteRoom(ctx context.Context, arg DeleteRoomParams) (int64, error)
 	DetachCustomerGroup(ctx context.Context, arg DetachCustomerGroupParams) error
 	DetachProductCategory(ctx context.Context, arg DetachProductCategoryParams) error
 	GetCustomer(ctx context.Context, arg GetCustomerParams) (Customer, error)
@@ -33,6 +35,7 @@ type Querier interface {
 	GetLoginIdentity(ctx context.Context, arg GetLoginIdentityParams) (GetLoginIdentityRow, error)
 	GetProduct(ctx context.Context, arg GetProductParams) (Product, error)
 	GetProductCategory(ctx context.Context, arg GetProductCategoryParams) (ProductCategory, error)
+	GetRoom(ctx context.Context, arg GetRoomParams) (Room, error)
 	GetTenantBySlug(ctx context.Context, slug string) (GetTenantBySlugRow, error)
 	ListCustomerGroups(ctx context.Context, tenantID pgtype.UUID) ([]ListCustomerGroupsRow, error)
 	ListCustomers(ctx context.Context, arg ListCustomersParams) ([]ListCustomersRow, error)
@@ -41,12 +44,14 @@ type Querier interface {
 	ListProductCategories(ctx context.Context, tenantID pgtype.UUID) ([]ProductCategory, error)
 	ListProductUnits(ctx context.Context, arg ListProductUnitsParams) ([]ProductUnit, error)
 	ListProducts(ctx context.Context, arg ListProductsParams) ([]ListProductsRow, error)
+	ListRooms(ctx context.Context, arg ListRoomsParams) ([]ListRoomsRow, error)
 	LockProduct(ctx context.Context, arg LockProductParams) (Product, error)
 	NextProductNumber(ctx context.Context, tenantID pgtype.UUID) (int64, error)
 	UpdateCustomer(ctx context.Context, arg UpdateCustomerParams) (Customer, error)
 	UpdateCustomerGroup(ctx context.Context, arg UpdateCustomerGroupParams) (CustomerGroup, error)
 	UpdateProduct(ctx context.Context, arg UpdateProductParams) (Product, error)
 	UpdateProductCategory(ctx context.Context, arg UpdateProductCategoryParams) (ProductCategory, error)
+	UpdateRoom(ctx context.Context, arg UpdateRoomParams) (Room, error)
 }
 
 var _ Querier = (*Queries)(nil)

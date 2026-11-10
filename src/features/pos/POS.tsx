@@ -1,6 +1,11 @@
+import { apiConfig } from '../../api/config'
+import { usePosController } from '../../api/usePosController'
+import { customersRepository } from '../../api/catalog'
+import { errorMessage } from '../../api/recordAdapter'
+import { selectionId, type OrderDTO } from '../../api/pos'
 import { prototypeStorage } from '../../api/prototypeStorage'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { ArrowDownToLine, Banknote, Check, ChevronDown, CircleHelp, Clock3, CreditCard, Minus, Plus, QrCode, ReceiptText, Search, ShoppingBag, Trash2, Wifi, WifiOff, X } from 'lucide-react'
+import { ArrowDownToLine, Banknote, Check, CircleHelp, Clock3, CreditCard, Minus, Plus, QrCode, ReceiptText, Search, ShoppingBag, WifiOff, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { formatCurrency, products, recentOrders } from '../../services/mockData'
 import { createMockOrder, getOfflineOrderQueue, simulateOfflineOrderSync } from '../../services/mockCheckout'
@@ -34,7 +39,7 @@ export function POS() {
   const [category, setCategory] = useState('Tất cả')
   const [payment, setPayment] = useState<'cash' | 'qr' | null>(null)
   const [offline, setOffline] = useState(false)
-  const [queuedOrders, setQueuedOrders] = useState<string[]>(() => getOfflineOrderQueue())
+  const [queuedOrders, setQueuedOrders] = useState<string[]>(() => apiConfig.useMock ? getOfflineOrderQueue() : [])
   const [syncing, setSyncing] = useState(false)
   const [receipt, setReceipt] = useState('')
   const [ordersOpen, setOrdersOpen] = useState(false)
@@ -44,30 +49,41 @@ export function POS() {
   const [temporaryOpen, setTemporaryOpen] = useState(false)
   const [notice, setNotice] = useState('')
   const [newCustomerOpen, setNewCustomerOpen] = useState(false)
-  const [paidAmount, setPaidAmount] = useState('')
-  const catalogProducts = useMemo(() => loadCatalogProducts(), [])
+  const remote = usePosController()
+  const [closingTab, setClosingTab] = useState<string | null>(null)
+  const [serverReceipt, setServerReceipt] = useState<{ order: OrderDTO; change_vnd: number } | null>(null)
+  const mockCatalog = useMemo(() => apiConfig.useMock ? loadCatalogProducts() : [], [])
+  const catalogProducts = remote.remote ? remote.products : mockCatalog
   const categories = useMemo(() => ['Tất cả', ...new Set(catalogProducts.map((product) => product.category))], [catalogProducts])
-  const { items, discount, note, customer, table, orderCode, drafts, activeDraftId, add, setQuantity, remove, setDiscount, setNote, setCustomer, setTable, nextOrder, saveDraft, openDraft, syncActiveDraft, removeDraft, clear } = usePosStore()
-  useEffect(() => { syncActiveDraft() }, [items, discount, note, customer, table, orderCode, activeDraftId, syncActiveDraft])
-  const [rooms] = useState(() => {
+  const { items, discount, note, customer, customerID, table, orderCode, drafts: mockDrafts, tabs, activeTabID, newTab, activateTab, closeTab, paidBefore, paidAmount, setPaidAmount, activeDraftId, add: addProduct, setQuantity, remove, setDiscount, setNote, setCustomer, setTable, nextOrder, saveDraft, openDraft, syncActiveDraft, removeDraft, clear } = usePosStore()
+  const add = (product: Product) => { if (remote.busy) return; addProduct(remote.remote ? { ...product, id: selectionId(product.sourceId ?? product.id, product.unitName, product.selectedAttributes) } : product) }
+  const drafts = remote.remote ? remote.drafts : mockDrafts
+  useEffect(() => { if (apiConfig.useMock) syncActiveDraft() }, [items, discount, note, customer, table, orderCode, activeDraftId, syncActiveDraft])
+  useEffect(() => { const update = () => setOffline(!navigator.onLine); update(); window.addEventListener('online', update); window.addEventListener('offline', update); return () => { window.removeEventListener('online', update); window.removeEventListener('offline', update) } }, [])
+  const [mockRooms] = useState(() => {
+    if (!apiConfig.useMock) return []
     try {
       const records: unknown = JSON.parse(prototypeStorage.getItem('fnb-management:rooms') ?? '[]')
       const names = Array.isArray(records) ? records.map((record) => typeof record === 'object' && record !== null && 'name' in record ? String(record.name) : '').filter(Boolean) : []
       return names.length ? names : ['Mang về', 'Bàn 01', 'Bàn 02', 'Bàn 03']
     } catch { return ['Mang về', 'Bàn 01', 'Bàn 02', 'Bàn 03'] }
   })
-  const [customers, setCustomers] = useState(() => {
+  const rooms = remote.remote ? ['Mang về', ...remote.rooms.map((room) => room.name)] : mockRooms
+  const [mockCustomers, setCustomers] = useState(() => {
+    if (!apiConfig.useMock) return []
     try {
       const records: unknown = JSON.parse(prototypeStorage.getItem('fnb-management:customers') ?? '[]')
       const names = Array.isArray(records) ? records.map((record) => typeof record === 'object' && record !== null && 'name' in record ? String(record.name) : '').filter(Boolean) : []
       return ['Khách lẻ', 'Anh Nam', 'Chị Như', ...names.filter((name) => !['Anh Nam', 'Chị Như'].includes(name))]
     } catch { return ['Khách lẻ', 'Anh Nam', 'Chị Như'] }
   })
+  const customers = remote.remote ? ['Khách lẻ', ...remote.customers.map((person) => person.name)] : mockCustomers
   const subtotal = items.reduce((total, line) => total + line.product.price * line.quantity, 0)
   const total = Math.max(0, subtotal - discount)
   const paidInCart = Math.min(total, Math.max(0, Number(paidAmount) || 0))
-  const debt = Math.max(0, total - paidInCart)
+  const debt = Math.max(0, total - paidInCart - paidBefore)
   const customerDebt = useMemo(() => {
+    if (!apiConfig.useMock) return 0
     try {
       const saved: unknown = JSON.parse(prototypeStorage.getItem('fnb-management:invoices') ?? 'null')
       if (!Array.isArray(saved)) return 0
@@ -81,6 +97,7 @@ export function POS() {
 
   const pay = async (received: number) => {
     if (items.length === 0) return
+    if (remote.remote) { const result = await remote.pay(received); setServerReceipt(result); setPayment(null); setPaidAmount(''); return }
     const order = await createMockOrder({ total, paymentMethod: payment ?? 'cash', offline })
     const now = new Date()
     const date = new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).format(now)
@@ -99,9 +116,22 @@ export function POS() {
     clear()
   }
 
-  const beginPayment = (kind: 'cash' | 'qr') => {
-    if (items.length > 0) setPayment(kind)
+  const estimate = async () => {
+    try { if (remote.remote) { if (offline) throw new Error('Đang offline. Đơn chưa được gửi lên server.'); const order = await remote.save(); setNotice('Đã lưu hóa đơn tạm tính ' + order.code) } else { const draft = saveDraft(); if (draft) setNotice('Đã lưu hóa đơn tạm tính ' + draft.orderCode + ': ' + draft.table) } } catch (error) { setNotice(errorMessage(error)) }
   }
+  const beginPayment = async (kind: 'cash' | 'qr') => {
+    if (!items.length || remote.busy) return
+    if (remote.remote && kind === 'qr') { setNotice('Chưa cấu hình nhà cung cấp QR. Chưa ghi nhận thanh toán.'); return }
+    try { if (remote.remote) { if (offline) throw new Error('Cần kết nối server để xác nhận thanh toán.'); await remote.save() }; setPayment(kind) } catch (error) { setNotice(errorMessage(error)) }
+  }
+  const openOrder = async (id: string) => { try { if (remote.remote) await remote.open(id); else openDraft(id); setCatalogTab('menu') } catch (error) { setNotice(errorMessage(error)) } }
+  const selectRoom = async (room: string) => {
+    const existing = drafts.find((draft) => draft.table === room)
+    if (existing) { await openOrder(existing.id); return }
+    if (table !== room && (items.length || usePosStore.getState().serverOrderID)) newTab()
+    setTable(room); setCatalogTab('menu')
+  }
+  useEffect(() => { if (!notice) return; const timer = window.setTimeout(() => setNotice(''), 4500); return () => window.clearTimeout(timer) }, [notice])
 
   const syncDemoQueue = async () => {
     setSyncing(true)
@@ -123,38 +153,41 @@ export function POS() {
       </aside>
 
       <main className="pos-catalog">
-        <header className="pos-topbar"><div className="pos-page-heading"><div><strong>Bán hàng POS</strong><span>Mộc Store · Quận 1</span></div></div><div className="pos-top-actions"><button className={`pos-connect ${offline ? 'disconnected' : ''}`} type="button" onClick={() => setOffline((value) => !value)}>{offline ? <WifiOff size={15} /> : <Wifi size={15} />} {offline ? 'Offline' : 'Online'}</button><span className="pos-time">05 Th11 2026</span><button className="icon-button" type="button" aria-label="Lịch sử đơn" onClick={() => setOrdersOpen(true)}><Clock3 size={18} /></button><span className="pos-mobile-avatar">CH</span></div></header>
 
-        {offline && <section className="offline-banner"><span className="offline-symbol"><WifiOff size={18} /></span><div><strong>POS vẫn hoạt động khi offline</strong><p>Đơn hàng sẽ được lưu trên thiết bị và đồng bộ khi có kết nối.</p></div><span className="offline-queue-count">{queuedOrders.length} đơn chờ đồng bộ</span></section>}
+
+        {offline && <section className="offline-banner"><span className="offline-symbol"><WifiOff size={18} /></span><div><strong>{remote.remote ? 'Đang mất kết nối server' : 'POS vẫn hoạt động khi offline'}</strong><p>{remote.remote ? 'Chưa gửi đơn hoặc xác nhận thanh toán. Giữ trang mở và kết nối lại để thử.' : 'Đơn hàng sẽ được lưu trên thiết bị và đồng bộ khi có kết nối.'}</p></div><span className="offline-queue-count">{queuedOrders.length} đơn chờ đồng bộ</span></section>}
         {!offline && queuedOrders.length > 0 && <section className="sync-banner"><span><ArrowDownToLine size={16} /> {queuedOrders.length} đơn đang chờ xử lý · dữ liệu demo lưu trên thiết bị</span><button type="button" disabled={syncing} onClick={syncDemoQueue}>{syncing ? 'Đang xử lý...' : 'Mô phỏng đồng bộ'}</button></section>}
 
-        <div className="pos-workflow-tabs" role="tablist" aria-label="Chọn bàn hoặc thực đơn"><button type="button" role="tab" aria-selected={catalogTab === 'tables'} className={catalogTab === 'tables' ? 'active' : ''} onClick={() => setCatalogTab('tables')}>Phòng / bàn</button><button type="button" role="tab" aria-selected={catalogTab === 'menu'} className={catalogTab === 'menu' ? 'active' : ''} onClick={() => setCatalogTab('menu')}>Thực đơn</button><button className="catalog-action" type="button" onClick={() => setOrdersOpen(true)}><Clock3 size={15} /> Đơn gần đây</button></div>
-        {catalogTab === 'tables' ? <section className="pos-table-picker"><div><h1>Chọn phòng / bàn</h1><p>Đang chọn: <strong>{table || 'Mang về'}</strong>. Nếu chưa chọn bàn, đơn sẽ được tính là mang về.</p></div><div className="pos-table-grid">{rooms.map((room) => { const draft = drafts.find((entry) => entry.table === room); return <button key={room} type="button" className={`${table === room ? 'active' : ''} ${draft ? 'has-open-order' : ''}`} onClick={() => { if (draft) openDraft(draft.id); else setTable(room); setCatalogTab('menu') }}><span>{room === 'Mang về' ? <ShoppingBag size={19} /> : room.replace('Bàn ', '')}</span><strong>{room}</strong>{draft && <small>Mở đơn · {formatCurrency(draft.items.reduce((sum, line) => sum + line.product.price * line.quantity, 0) - draft.discount)}</small>}</button> })}</div></section> : <><div className="pos-menu-toolbar"><label className="pos-search"><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm sản phẩm, SKU hoặc quét barcode..." /><kbd>⌘ K</kbd></label><span className="pos-selected-table">{table || 'Mang về'}</span></div><div className="category-tabs" role="tablist" aria-label="Danh mục sản phẩm">{categories.map((item) => <button key={item} type="button" role="tab" aria-selected={category === item} className={category === item ? 'active' : ''} onClick={() => setCategory(item)}>{item}</button>)}</div><div className="products-grid">{visibleProducts.map((product) => <ProductCard key={product.id} product={product} onAdd={add} />)}</div>{visibleProducts.length === 0 && <div className="empty-state product-empty"><Search size={24} /><strong>Không có sản phẩm phù hợp</strong><span>Kiểm tra từ khóa tìm kiếm hoặc danh mục.</span></div>}</>}
+        <div className="pos-workflow-tabs" role="toolbar" aria-label="Tìm kiếm, phòng bàn và đơn hàng"><label className="pos-search"><Search size={18} /><input value={search} onChange={(event) => { setSearch(event.target.value); setCatalogTab('menu') }} placeholder="Tìm sản phẩm, SKU hoặc quét barcode..." /><kbd>⌘ K</kbd></label><button type="button" aria-pressed={catalogTab === 'tables'} className={catalogTab === 'tables' ? 'active' : ''} onClick={() => setCatalogTab('tables')}>Phòng/Bàn</button><button type="button" aria-pressed={catalogTab === 'menu'} className={catalogTab === 'menu' ? 'active' : ''} onClick={() => setCatalogTab('menu')}>Thực đơn</button>{tabs.map((tab) => <div className={`pos-order-tab ${tab.id === activeTabID ? 'active' : ''}`} key={tab.id}><button type="button" disabled={remote.busy} aria-pressed={tab.id === activeTabID} onClick={() => { activateTab(tab.id); setCatalogTab('menu') }}>{tab.label}</button><button type="button" disabled={remote.busy} aria-label={`Đóng ${tab.label}`} onClick={() => setClosingTab(tab.id)}><X size={13} /></button></div>)}<button type="button" aria-label="Thêm đơn hàng" disabled={remote.busy} onClick={() => { newTab(); setCatalogTab('menu') }}><Plus size={16} /></button></div>
+        {remote.remote && (remote.loading || remote.error) && <div className="empty-state" role={remote.error ? 'alert' : 'status'}><strong>{remote.error ? errorMessage(remote.error) : 'Đang tải dữ liệu bán hàng...'}</strong>{remote.error && <button className="button button-secondary" type="button" onClick={() => void remote.invalidate()}>Thử lại</button>}</div>}
+        {catalogTab === 'tables' ? <section className="pos-table-picker"><div><h1>Chọn phòng / bàn</h1><p>Đang chọn: <strong>{table || 'Mang về'}</strong>. Nếu chưa chọn bàn, đơn sẽ được tính là mang về.</p></div><div className="pos-table-grid">{rooms.map((room) => { const draft = drafts.find((entry) => entry.table === room); return <button key={room} type="button" className={`${table === room ? 'active' : ''} ${draft ? 'has-open-order' : ''}`} disabled={remote.busy || remote.loading || Boolean(remote.error)} onClick={() => void selectRoom(room)}><span>{room === 'Mang về' ? <ShoppingBag size={19} /> : room.replace('Bàn ', '')}</span><strong>{room}</strong>{draft && <small>Mở đơn · {formatCurrency(draft.items.reduce((sum, line) => sum + line.product.price * line.quantity, 0) - draft.discount)}</small>}</button> })}</div></section> : <><div className="category-tabs" role="tablist" aria-label="Danh mục sản phẩm">{categories.map((item) => <button key={item} type="button" role="tab" aria-selected={category === item} className={category === item ? 'active' : ''} onClick={() => setCategory(item)}>{item}</button>)}</div><div className="products-grid">{visibleProducts.map((product) => <ProductCard key={product.id} product={product} onAdd={add} />)}</div>{visibleProducts.length === 0 && <div className="empty-state product-empty"><Search size={24} /><strong>Không có sản phẩm phù hợp</strong><span>Kiểm tra từ khóa tìm kiếm hoặc danh mục.</span></div>}</>}
       </main>
 
       <aside className={`cart-panel ${cartExpanded ? 'expanded' : ''}`}>
-        <div className="mobile-cart-handle" />
-        <div className="cart-header"><button className="cart-title-button" type="button" onClick={() => setCartExpanded((expanded) => !expanded)} aria-expanded={cartExpanded}><div><h2 className="cart-title-desktop">{orderCode}: {table}</h2><h2 className="cart-title-mobile">{orderCode}: {table}</h2><p className="cart-count-desktop">{items.reduce((totalCount, item) => totalCount + item.quantity, 0)} sản phẩm</p><p className="cart-items-mobile">{items.map(({ product, quantity }) => `${product.name} ×${quantity}`).join('  ·  ') || 'Chọn sản phẩm để bắt đầu'}</p></div><ChevronDown size={17} className="mobile-cart-chevron" /></button><button className="cart-clear" type="button" onClick={clear} disabled={items.length === 0}><Trash2 size={16} /> Xóa</button></div>
-        <div className="mobile-cart-summary"><div><span>Tổng thanh toán</span><strong>{formatCurrency(total)}</strong></div><div className="mobile-cart-actions"><button type="button" disabled={!items.length} onClick={() => { const draft = saveDraft(); if (draft) setNotice(`Đã lưu hóa đơn tạm tính ${draft.orderCode}: ${draft.table}`) }}>Tạm tính</button><button type="button" disabled={!items.length} onClick={() => setPaymentOptionsOpen(true)}>Thanh toán</button></div></div>
+        <button className="mobile-cart-handle" type="button" aria-label={cartExpanded ? 'Thu gọn giỏ hàng' : 'Mở chi tiết giỏ hàng'} onClick={() => setCartExpanded((open) => !open)} />
+
+        <div className="mobile-cart-summary"><div role="button" tabIndex={0} aria-label="Mở giỏ hàng" aria-expanded={cartExpanded} onClick={() => setCartExpanded((open) => !open)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setCartExpanded((open) => !open) } }}><span>Tổng thanh toán</span><strong>{formatCurrency(total)}</strong></div><div className="mobile-cart-actions"><button type="button" disabled={!items.length || remote.busy || Boolean(remote.error)} onClick={() => void estimate()}>Tạm tính</button><button type="button" disabled={!items.length || remote.busy || Boolean(remote.error)} onClick={() => setPaymentOptionsOpen(true)}>Thanh toán</button></div></div>
         <div className="order-type"><span className="order-type-icon"><ShoppingBag size={15} /></span><span>{orderCode}: {table || 'Mang về'}</span></div>
-        <div className="cart-metadata"><label>Khách hàng<select value={customer} onChange={(event) => { if (event.target.value === '__create__') setNewCustomerOpen(true); else setCustomer(event.target.value) }}>{customers.map((item) => <option key={item}>{item}</option>)}<option value="__create__">＋ Tạo mới khách hàng</option></select></label></div>
-        <div className="cart-lines">{items.map(({ product, quantity }) => <CartItem key={product.id} product={product} quantity={quantity} onChange={setQuantity} onRemove={remove} />)}{items.length === 0 && <div className="cart-empty"><span className="cart-empty-icon"><ShoppingBag size={22} /></span><strong>Đơn hàng đang trống</strong><p>Chọn sản phẩm để bắt đầu tạo đơn.</p></div>}</div>
-        <div className="cart-note"><label htmlFor="order-note">Ghi chú đơn hàng</label><textarea id="order-note" value={note} onChange={(event) => setNote(event.target.value)} placeholder="Thêm ghi chú..." rows={2} /></div>
-        <div className="discount-row"><span>Giảm giá</span><label><input type="number" min="0" max={subtotal} value={discount || ''} onChange={(event) => setDiscount(Math.min(subtotal, Number(event.target.value) || 0))} placeholder="0" /><span>₫</span></label></div>
-        <label className="cart-paid-field">Khách thanh toán<input type="number" min="0" max={total} value={paidAmount} onChange={(event) => setPaidAmount(event.target.value)} placeholder="0 ₫" /></label>
+        <div className="cart-metadata"><label>Khách hàng<select disabled={remote.busy} value={remote.remote ? customerID ?? '' : customer} onChange={(event) => { if (event.target.value === '__create__') setNewCustomerOpen(true); else if (remote.remote) { const person = remote.customers.find((p) => p.id === event.target.value); setCustomer(person?.name ?? 'Khách lẻ'); usePosStore.setState({ customerID: person?.id ?? null }) } else setCustomer(event.target.value) }}>{remote.remote ? <><option value="">Khách lẻ</option>{remote.customers.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</> : customers.map((item) => <option key={item}>{item}</option>)}<option value="__create__">＋ Tạo mới khách hàng</option></select></label></div>
+        <div className="cart-lines">{items.map(({ product, quantity }) => <CartItem key={product.id} product={product} quantity={quantity} onChange={(id, quantity) => { if (!remote.busy) setQuantity(id, quantity) }} onRemove={(id) => { if (!remote.busy) remove(id) }} />)}{items.length === 0 && <div className="cart-empty"><span className="cart-empty-icon"><ShoppingBag size={22} /></span><strong>Đơn hàng đang trống</strong><p>Chọn sản phẩm để bắt đầu tạo đơn.</p></div>}</div>
+        <div className="cart-note"><label htmlFor="order-note">Ghi chú đơn hàng</label><textarea id="order-note" value={note} disabled={remote.busy} onChange={(event) => setNote(event.target.value)} placeholder="Thêm ghi chú..." rows={2} /></div>
+        <div className="discount-row"><span>Giảm giá</span><label><input type="number" min="0" max={subtotal} disabled={remote.busy} value={discount || ''} onChange={(event) => setDiscount(Math.min(subtotal, Number(event.target.value) || 0))} placeholder="0" /><span>₫</span></label></div>
+        <label className="cart-paid-field">Khách thanh toán<input type="number" min="0" disabled={remote.busy} value={paidAmount} onChange={(event) => setPaidAmount(event.target.value)} placeholder="0 ₫" /></label>
         <div className="totals"><div><span>Tạm tính</span><strong>{formatCurrency(subtotal)}</strong></div>{discount > 0 && <div><span>Giảm giá</span><strong className="discount-amount">−{formatCurrency(discount)}</strong></div>}<div className="total-line"><strong>Khách cần trả</strong><strong>{formatCurrency(total)}</strong></div><div className="debt-line"><span>Nợ hóa đơn này</span><strong>{formatCurrency(debt)}</strong></div>{customerDebt > 0 && <div className="debt-line"><span>Nợ trước đó · {customer}</span><strong>{formatCurrency(customerDebt)}</strong></div>}</div>
-        <button className="cart-estimate-button" type="button" disabled={!items.length} onClick={() => { const draft = saveDraft(); if (draft) setNotice(`Đã lưu hóa đơn tạm tính ${draft.orderCode}: ${draft.table}`) }}><ReceiptText size={16} /> Tạm tính</button>
-        <div className="payment-actions"><button className="pay-cash" type="button" disabled={!items.length} onClick={() => beginPayment('cash')}><Banknote size={18} /> Tiền mặt</button><button className="pay-qr" type="button" disabled={!items.length} onClick={() => beginPayment('qr')}><QrCode size={18} /> Thanh toán QR</button></div>
-        <p className="qr-hint">QR được tạo qua webhook khi thiết bị online.</p>
+        <button className="cart-estimate-button" type="button" disabled={!items.length || remote.busy || Boolean(remote.error)} onClick={() => void estimate()}><ReceiptText size={16} /> Tạm tính</button>
+        <div className="payment-actions"><button className="pay-cash" type="button" disabled={!items.length || remote.busy || Boolean(remote.error)} onClick={() => beginPayment('cash')}><Banknote size={18} /> Tiền mặt</button><button className="pay-qr" type="button" disabled={!items.length || remote.busy || Boolean(remote.error)} onClick={() => beginPayment('qr')}><QrCode size={18} /> Thanh toán QR</button></div>
+        <p className="qr-hint">{remote.remote ? 'QR chưa cấu hình; chỉ tiền mặt được ghi nhận trên server.' : 'QR được tạo qua webhook khi thiết bị online.'}</p>
       </aside>
 
-      {payment && <PaymentDialog kind={payment} total={total} offline={offline} initialReceived={paidAmount} onClose={() => setPayment(null)} onPay={pay} />}
+      {payment && <PaymentDialog kind={payment} total={Math.max(0, total - paidBefore)} offline={offline} initialReceived={paidAmount} onClose={() => { if (!remote.busy) setPayment(null) }} onPay={pay} />}
       {paymentOptionsOpen && <PaymentOptions onClose={() => setPaymentOptionsOpen(false)} onSelect={(kind) => { setPaymentOptionsOpen(false); beginPayment(kind) }} />}
-      {temporaryOpen && <DraftOrdersDialog drafts={drafts} onClose={() => setTemporaryOpen(false)} onOpen={(id) => { openDraft(id); setTemporaryOpen(false); setCatalogTab('menu') }} />}
+      {temporaryOpen && <DraftOrdersDialog remote={remote.remote} drafts={drafts} onClose={() => setTemporaryOpen(false)} onOpen={(id) => { void openOrder(id); setTemporaryOpen(false) }} />}
       {notice && <div className="toast" role="status">{notice}</div>}
-      {newCustomerOpen && <NewCustomerDialog onClose={() => setNewCustomerOpen(false)} onSave={(name, phone) => { setCustomers((current) => [...current, name]); setCustomer(name); const saved = JSON.parse(prototypeStorage.getItem('fnb-management:customers') ?? 'null'); const rows = Array.isArray(saved) ? saved : managementModules.find((module) => module.id === 'customers')?.rows ?? []; prototypeStorage.setItem('fnb-management:customers', JSON.stringify([{ name, phone, segment: 'Khách mới', points: 0, orders: 0, spent: 0 }, ...rows])); setNewCustomerOpen(false) }} />}
+      {newCustomerOpen && <NewCustomerDialog remote={remote.remote} onClose={() => setNewCustomerOpen(false)} onSave={async (name, phone) => { if (remote.remote) { const person = await customersRepository.save({ name, phone: phone || null, email: null, note: null, group_id: null }); await remote.invalidate(); setCustomer(person.name); usePosStore.setState({ customerID: person.id }) } else { setCustomers((current) => [...current, name]); setCustomer(name); const saved = JSON.parse(prototypeStorage.getItem('fnb-management:customers') ?? 'null'); const rows = Array.isArray(saved) ? saved : managementModules.find((module) => module.id === 'customers')?.rows ?? []; prototypeStorage.setItem('fnb-management:customers', JSON.stringify([{ name, phone, segment: 'Khách mới', points: 0, orders: 0, spent: 0 }, ...rows])) }; setNewCustomerOpen(false) }} />}
       {receipt && <div className="modal-backdrop" role="presentation"><section className="modal-card receipt-card" role="dialog" aria-modal="true"><button className="modal-close" type="button" aria-label="Đóng" onClick={() => setReceipt('')}><X size={18} /></button><span className="receipt-check"><Check size={22} /></span><h2>{offline ? 'Đơn hàng đã lưu offline' : 'Đơn demo đã xử lý'}</h2><p>{offline ? <>Mã đơn <strong>#{receipt}</strong> · Đang chờ đồng bộ cục bộ</> : receipt.startsWith('MOC-') ? <>Mã đơn <strong>#{receipt}</strong></> : receipt}</p><small className="receipt-demo-note">Đang dùng dữ liệu demo; chưa kết nối API backend.</small><button className="button button-primary receipt-done" type="button" onClick={() => setReceipt('')}>Hoàn tất</button></section></div>}
-      {ordersOpen && <OrdersDialog onClose={() => setOrdersOpen(false)} />}
+      {closingTab && <div className="modal-backdrop" role="presentation"><section className="modal-card delete-dialog" role="dialog" aria-modal="true" aria-labelledby="close-order-title"><h2 id="close-order-title">Đóng {tabs.find((tab) => tab.id === closingTab)?.label}?</h2><p>Giỏ hàng chưa lưu trong tab sẽ bị bỏ. Đơn tạm tính đã lưu vẫn có thể mở lại từ phòng/bàn.</p><div className="modal-actions"><button className="button button-secondary" type="button" onClick={() => setClosingTab(null)}>Hủy</button><button className="button button-danger" type="button" disabled={remote.busy} onClick={() => { closeTab(closingTab); setClosingTab(null) }}>Đóng đơn hàng</button></div></section></div>}
+      {serverReceipt && <div className="modal-backdrop" role="presentation"><section className="modal-card receipt-card" role="dialog" aria-modal="true"><h2>{serverReceipt.order.status === 'paid' ? 'Thanh toán thành công' : 'Đã ghi nhận thanh toán một phần'}</h2><p>Hóa đơn {serverReceipt.order.invoice_code} · {serverReceipt.order.room}</p><div className="invoice-detail-items">{serverReceipt.order.items.map((line) => <p key={line.key}><span>{line.name} × {line.quantity}</span><strong>{formatCurrency(line.amount_vnd)}</strong></p>)}</div><p>Đã trả: {formatCurrency(serverReceipt.order.paid_vnd)}</p><p>Còn nợ: {formatCurrency(serverReceipt.order.total_vnd - serverReceipt.order.paid_vnd)}</p><p>Tiền thừa: {formatCurrency(serverReceipt.change_vnd)}</p><button className="button button-primary" type="button" onClick={() => setServerReceipt(null)}>Hoàn tất</button></section></div>}
+      {ordersOpen && <OrdersDialog records={remote.remote ? remote.history.map((order) => ({ code: order.invoice_code ?? order.code, time: new Date(order.updated_at).toLocaleString('vi-VN'), customer: order.customer, table: order.room, method: 'Tiền mặt', amount: order.total_vnd, discount: order.discount_vnd, paid: order.paid_vnd, status: order.status === 'paid' ? 'Đã thanh toán' : 'Thanh toán một phần', items: order.items.map((line) => ({ name: line.name, quantity: line.quantity, price: line.price_vnd })) })) : undefined} onClose={() => setOrdersOpen(false)} />}
     </div>
   )
 }
@@ -182,14 +215,14 @@ function PaymentOptions({ onClose, onSelect }: { onClose: () => void; onSelect: 
   return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><section className="modal-card payment-options-dialog" role="dialog" aria-modal="true" aria-labelledby="payment-options-title"><button className="modal-close" type="button" onClick={onClose} aria-label="Đóng"><X size={18} /></button><h2 id="payment-options-title">Chọn phương thức thanh toán</h2><p>Chọn cách khách sẽ thanh toán đơn hàng.</p><div className="payment-option-buttons"><button type="button" onClick={() => onSelect('cash')}><Banknote size={19} /><span>Tiền mặt</span></button><button type="button" onClick={() => onSelect('qr')}><QrCode size={19} /><span>QR chuyển khoản</span></button></div></section></div>
 }
 
-function OrdersDialog({ onClose }: { onClose: () => void }) {
-  const orders = useMemo(() => loadInvoiceOrders(), [])
+function OrdersDialog({ onClose, records }: { onClose: () => void; records?: PosInvoice[] }) {
+  const orders = useMemo(() => records ?? loadInvoiceOrders(), [records])
   const [selected, setSelected] = useState<PosInvoice | null>(null)
   return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><section className="modal-card orders-dialog" role="dialog" aria-modal="true" aria-labelledby="recent-orders-title">
-    <button className="modal-close" type="button" aria-label="Đóng" onClick={onClose}><X size={18} /></button><span className="modal-icon"><Clock3 size={19} /></span><h2 id="recent-orders-title">Đơn hàng gần đây</h2><p>Các đơn gần nhất trong dữ liệu demo.</p>
+    <button className="modal-close" type="button" aria-label="Đóng" onClick={onClose}><X size={18} /></button><span className="modal-icon"><Clock3 size={19} /></span><h2 id="recent-orders-title">Đơn hàng gần đây</h2><p>{records ? 'Tối đa 100 hóa đơn gần nhất trong chi nhánh.' : 'Các đơn gần nhất trong dữ liệu demo.'}</p>
     <div className="recent-order-list">{orders.map((order) => <button className="recent-order-row" key={order.code} type="button" onClick={() => setSelected(order)}><div><strong>#{order.code}</strong><span>{order.time} · {order.method}</span></div><strong>{formatCurrency(order.amount)}</strong></button>)}</div>
     {selected && <div className="invoice-detail-panel"><div><strong>Hóa đơn #{selected.code}</strong><button type="button" aria-label="Đóng chi tiết hóa đơn" onClick={() => setSelected(null)}><X size={15} /></button></div><p><span>Thời gian</span><strong>{selected.time}</strong></p><p><span>Phòng/bàn</span><strong>{selected.table}</strong></p><p><span>Khách hàng</span><strong>{selected.customer}</strong></p><div className="invoice-detail-items">{selected.items.map((item, index) => <p key={`${item.name}-${index}`}><span>{item.name} × {item.quantity}</span><strong>{formatCurrency(item.price * item.quantity)}</strong></p>)}</div><p><span>Giảm giá</span><strong>{formatCurrency(selected.discount)}</strong></p><p><span>Phương thức</span><strong>{selected.method}</strong></p><p><span>Khách cần trả</span><strong>{formatCurrency(selected.amount)}</strong></p><p><span>Khách đã trả</span><strong>{formatCurrency(selected.paid)}</strong></p><p><span>Còn nợ</span><strong>{formatCurrency(Math.max(0, selected.amount - selected.paid))}</strong></p><p><span>Trạng thái</span><strong>{selected.status}</strong></p></div>}
-    <small className="receipt-demo-note">Chưa có kết nối API lịch sử đơn hàng.</small>
+    <small className="receipt-demo-note">{records ? 'Hóa đơn đã được ghi nhận trên server.' : 'Chưa có kết nối API lịch sử đơn hàng.'}</small>
   </section></div>
 }
 
@@ -212,20 +245,22 @@ function loadInvoiceOrders(): PosInvoice[] {
   } catch { return sample }
 }
 
-function DraftOrdersDialog({ drafts, onClose, onOpen }: { drafts: PosDraft[]; onClose: () => void; onOpen: (id: string) => void }) {
+function DraftOrdersDialog({ drafts, onClose, onOpen, remote = false }: { remote?: boolean; drafts: PosDraft[]; onClose: () => void; onOpen: (id: string) => void }) {
   return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><section className="modal-card orders-dialog" role="dialog" aria-modal="true" aria-labelledby="draft-orders-title"><button className="modal-close" type="button" aria-label="Đóng" onClick={onClose}><X size={18} /></button><span className="modal-icon"><ReceiptText size={18} /></span><h2 id="draft-orders-title">Hóa đơn tạm tính</h2><p>Chọn bàn để tiếp tục thêm món hoặc thanh toán.</p>{drafts.length ? <div className="recent-order-list">{drafts.map((draft) => {
     const subtotal = draft.items.reduce((sum, line) => sum + line.product.price * line.quantity, 0)
     return <button className="recent-order-row draft-order-row" key={draft.id} type="button" onClick={() => onOpen(draft.id)}><div><strong>{draft.orderCode}: {draft.table}</strong><span>{draft.customer} · {draft.items.reduce((sum, line) => sum + line.quantity, 0)} món · {new Date(draft.updatedAt).toLocaleString('vi-VN')}</span></div><strong>{formatCurrency(Math.max(0, subtotal - draft.discount))}</strong></button>
-  })}</div> : <div className="empty-state"><ReceiptText size={23} /><strong>Chưa có hóa đơn tạm tính</strong><span>Thêm món vào giỏ rồi chọn “Tạm tính”.</span></div>}<small className="receipt-demo-note">Hóa đơn được lưu cục bộ trên thiết bị này.</small></section></div>
+  })}</div> : <div className="empty-state"><ReceiptText size={23} /><strong>Chưa có hóa đơn tạm tính</strong><span>Thêm món vào giỏ rồi chọn “Tạm tính”.</span></div>}<small className="receipt-demo-note">{remote ? 'Hóa đơn tạm tính được lưu trên server theo chi nhánh.' : 'Hóa đơn được lưu cục bộ trên thiết bị này.'}</small></section></div>
 }
 
-function NewCustomerDialog({ onClose, onSave }: { onClose: () => void; onSave: (name: string, phone: string) => void }) {
-  const submit = (event: FormEvent<HTMLFormElement>) => {
+function NewCustomerDialog({ onClose, onSave, remote = false }: { remote?: boolean; onClose: () => void; onSave: (name: string, phone: string) => void | Promise<void> }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const data = new FormData(event.currentTarget)
-    onSave(String(data.get('name') ?? '').trim(), String(data.get('phone') ?? '').trim())
+    setBusy(true); setError(''); try { await onSave(String(data.get('name') ?? '').trim(), String(data.get('phone') ?? '').trim()) } catch (error) { setError(errorMessage(error)) } finally { setBusy(false) }
   }
-  return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><section className="modal-card record-dialog" role="dialog" aria-modal="true" aria-labelledby="new-customer-title"><button className="modal-close" type="button" onClick={onClose} aria-label="Đóng"><X size={18} /></button><h2 id="new-customer-title">Tạo khách hàng mới</h2><p>Khách hàng sẽ được lưu trong dữ liệu demo cục bộ.</p><form onSubmit={submit}><label className="form-label">Tên khách hàng<input name="name" required placeholder="Ví dụ: Anh Nam" /></label><label className="form-label">Số điện thoại<input name="phone" type="tel" placeholder="Nhập số điện thoại" /></label><div className="modal-actions"><button className="button button-secondary" type="button" onClick={onClose}>Hủy</button><button className="button button-primary" type="submit">Lưu khách hàng</button></div></form></section></div>
+  return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><section className="modal-card record-dialog" role="dialog" aria-modal="true" aria-labelledby="new-customer-title"><button className="modal-close" type="button" onClick={onClose} aria-label="Đóng"><X size={18} /></button><h2 id="new-customer-title">Tạo khách hàng mới</h2><p>{remote ? 'Khách hàng được lưu trên hệ thống cửa hàng.' : 'Khách hàng sẽ được lưu trong dữ liệu demo cục bộ.'}</p>{error && <p className="form-error" role="alert">{error}</p>}<form onSubmit={submit}><label className="form-label">Tên khách hàng<input name="name" required placeholder="Ví dụ: Anh Nam" /></label><label className="form-label">Số điện thoại<input name="phone" type="tel" placeholder="Nhập số điện thoại" /></label><div className="modal-actions"><button className="button button-secondary" type="button" onClick={onClose}>Hủy</button><button className="button button-primary" type="submit" disabled={busy}>Lưu khách hàng</button></div></form></section></div>
 }
 
 function ProductCard({ product, onAdd }: { product: Product; onAdd: (product: Product) => void }) {
@@ -235,7 +270,7 @@ function ProductCard({ product, onAdd }: { product: Product; onAdd: (product: Pr
   const selectOptions = (attributeValue?: { name: string; value: string }, unit?: NonNullable<Product['units']>[number]) => {
     const suffix = [attributeValue && `${attributeValue.name} ${attributeValue.value}`, unit?.name].filter(Boolean).join(' · ')
     const price = unit ? (Number(unit.price) > 0 ? Number(unit.price) : product.price * unit.ratio) : product.price
-    onAdd({ ...product, id: `${product.id}:${suffix || 'base'}`, name: suffix ? `${product.name} · ${suffix}` : product.name, sku: product.sku, price })
+    onAdd({ ...product, id: `${product.id}:${suffix || 'base'}`, name: suffix ? `${product.name} · ${suffix}` : product.name, sku: product.sku, price: price + (attributeValue ? (product.attributes?.find((a) => a.name === attributeValue.name && a.value.split(',').map((value) => value.trim()).includes(attributeValue.value))?.price_delta_vnd ?? 0) : 0), sourceId: product.sourceId ?? product.id, unitName: unit?.name, selectedAttributes: attributeValue ? [attributeValue] : [] })
     setOptionsOpen(false)
   }
   return <>
@@ -269,9 +304,9 @@ function PaymentDialog({ kind, total, offline, initialReceived, onClose, onPay }
     <button className="modal-close" type="button" onClick={onClose} aria-label="Đóng"><X size={18} /></button>
     <span className="modal-icon">{kind === 'cash' ? <Banknote size={19} /> : <QrCode size={19} />}</span><h2 id="payment-title">{kind === 'cash' ? 'Thanh toán tiền mặt' : 'Thanh toán bằng QR'}</h2><p>Đơn hàng tại Mộc Store · Quận 1</p>
     <div className="payment-amount"><span>Khách cần thanh toán</span><strong>{formatCurrency(total)}</strong></div>
-    {kind === 'cash' ? <><label className="form-label">Khách thanh toán<input type="number" min="0" max={total} value={received} onChange={(event) => setReceived(event.target.value)} placeholder="Nhập số tiền" /></label><div className="change-line"><span>{change > 0 ? 'Tiền thừa' : 'Còn nợ'}</span><strong>{change > 0 ? formatCurrency(change) : formatCurrency(Math.max(0, total - (Number(received) || 0)))}</strong></div></> : <><div className="qr-placeholder"><QrCode size={112} strokeWidth={1.2} /><span>QR thanh toán</span></div><div className="qr-payment-status"><span className={`status-pulse ${offline ? 'paused' : ''}`} />{offline ? 'QR khả dụng khi có kết nối internet' : 'Đang chờ xác nhận thanh toán'}</div></>}
+    {kind === 'cash' ? <><label className="form-label">Khách thanh toán<input type="number" min="0" value={received} onChange={(event) => setReceived(event.target.value)} placeholder="Nhập số tiền" /></label><div className="change-line"><span>{change > 0 ? 'Tiền thừa' : 'Còn nợ'}</span><strong>{change > 0 ? formatCurrency(change) : formatCurrency(Math.max(0, total - (Number(received) || 0)))}</strong></div></> : <><div className="qr-placeholder"><QrCode size={112} strokeWidth={1.2} /><span>QR thanh toán</span></div><div className="qr-payment-status"><span className={`status-pulse ${offline ? 'paused' : ''}`} />{offline ? 'QR khả dụng khi có kết nối internet' : 'Đang chờ xác nhận thanh toán'}</div></>}
     {offline && kind === 'qr' && <p className="form-error" role="status">Không thể xác nhận thanh toán QR khi thiết bị offline.</p>}
     {error && <p className="form-error" role="alert">{error}</p>}
-    <div className="modal-actions"><button className="button button-secondary" type="button" disabled={busy} onClick={onClose}>Hủy</button><button className="button button-primary" type="button" disabled={busy || (offline && kind === 'qr') || (kind === 'cash' && Number(received) <= 0)} onClick={confirm}>{busy ? 'Đang xử lý...' : offline ? 'Lưu đơn hàng' : kind === 'cash' ? 'Ghi nhận thanh toán' : 'Xác nhận đã nhận tiền'}</button></div>
+    <div className="modal-actions"><button className="button button-secondary" type="button" disabled={busy} onClick={onClose}>Hủy</button><button className="button button-primary" type="button" disabled={busy || (offline && kind === 'qr') || (kind === 'cash' && (Number(received) < 0 || (total > 0 && Number(received) === 0)))} onClick={confirm}>{busy ? 'Đang xử lý...' : offline ? 'Lưu đơn hàng' : kind === 'cash' ? 'Ghi nhận thanh toán' : 'Xác nhận đã nhận tiền'}</button></div>
   </section></div>
 }

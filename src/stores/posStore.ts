@@ -1,3 +1,4 @@
+import { apiConfig } from '../api/config'
 import { create } from 'zustand'
 import type { CartLine, Product } from '../types'
 
@@ -30,7 +31,28 @@ function incrementOrderCode(orderCode: string) {
   return `${prefix}-${Number(suffix || 0) + 1}`
 }
 
+type TabSnapshot = Pick<PosState, 'items' | 'discount' | 'note' | 'customer' | 'customerID' | 'table' | 'orderCode' | 'activeDraftId' | 'serverOrderID' | 'serverVersion' | 'paidBefore' | 'paidAmount' | 'saveKey' | 'saveSignature'>
+export type OrderTab = { id: string; label: string; snapshot: TabSnapshot | null }
+const emptyCart = (): TabSnapshot => ({ items: [], discount: 0, note: '', customer: 'Khách lẻ', customerID: null, table: 'Mang về', orderCode: apiConfig.useMock ? '168-15' : 'Tự động', activeDraftId: null, serverOrderID: null, serverVersion: 0, paidBefore: 0, paidAmount: '', saveKey: '', saveSignature: '' })
+function snapshot(state: PosState): TabSnapshot { const { items, discount, note, customer, customerID, table, orderCode, activeDraftId, serverOrderID, serverVersion, paidBefore, paidAmount, saveKey, saveSignature } = state; return { items, discount, note, customer, customerID, table, orderCode, activeDraftId, serverOrderID, serverVersion, paidBefore, paidAmount, saveKey, saveSignature } }
+
 type PosState = {
+  customerID: string | null
+  serverOrderID: string | null
+  serverVersion: number
+  paidBefore: number
+  paidAmount: string
+  saveKey: string
+  saveSignature: string
+  tabs: OrderTab[]
+  activeTabID: string
+  serial: number
+  newTab: () => void
+  activateTab: (id: string) => void
+  closeTab: (id: string) => void
+  resetSession: () => void
+  setPaidAmount: (value: string) => void
+
   items: CartLine[]
   discount: number
   note: string
@@ -55,13 +77,20 @@ type PosState = {
 }
 
 export const usePosStore = create<PosState>((set, get) => ({
+  customerID: null, serverOrderID: null, serverVersion: 0, paidBefore: 0, paidAmount: '', saveKey: '', saveSignature: '',
+  tabs: [{ id: 'initial', label: 'Đơn hàng 1', snapshot: null }], activeTabID: 'initial', serial: 1,
+  setPaidAmount: (paidAmount) => set({ paidAmount }),
+  newTab: () => { const state = get(); const id = crypto.randomUUID(); const serial = state.serial + 1; set({ ...emptyCart(), serial, activeTabID: id, tabs: [...state.tabs.map((tab) => tab.id === state.activeTabID ? { ...tab, snapshot: snapshot(state) } : tab), { id, label: 'Đơn hàng ' + serial, snapshot: null }] }) },
+  activateTab: (id) => { const state = get(); const target = state.tabs.find((tab) => tab.id === id); if (!target || id === state.activeTabID) return; set({ ...(target.snapshot ?? emptyCart()), activeTabID: id, tabs: state.tabs.map((tab) => tab.id === state.activeTabID ? { ...tab, snapshot: snapshot(state) } : tab) }) },
+  closeTab: (id) => { const state = get(); const remaining = state.tabs.filter((tab) => tab.id !== id); if (state.activeTabID !== id) { set({ tabs: remaining }); return }; if (!remaining.length) { const next = state.serial + 1; const tabID = crypto.randomUUID(); set({ ...emptyCart(), serial: next, activeTabID: tabID, tabs: [{ id: tabID, label: 'Đơn hàng ' + next, snapshot: null }] }); return }; const target = remaining[remaining.length - 1]; set({ ...(target.snapshot ?? emptyCart()), tabs: remaining, activeTabID: target.id }) },
+  resetSession: () => set({ ...emptyCart(), drafts: [], tabs: [{ id: 'initial', label: 'Đơn hàng 1', snapshot: null }], activeTabID: 'initial', serial: 1 }),
   items: [],
   discount: 0,
   note: '',
   customer: 'Khách lẻ',
   table: 'Mang về',
-  orderCode: '168-15',
-  drafts: readDrafts(),
+  orderCode: apiConfig.useMock ? '168-15' : 'Tự động',
+  drafts: apiConfig.useMock ? readDrafts() : [],
   activeDraftId: null,
   add: (product) => set((state) => {
     const exists = state.items.find((line) => line.product.id === product.id)

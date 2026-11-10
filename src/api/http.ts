@@ -9,7 +9,7 @@ export class ApiError extends Error {
 }
 
 const errorSchema = z.object({ error: z.object({ code: z.string(), message: z.string() }) })
-type RequestOptions = { method?: 'GET' | 'POST' | 'PUT' | 'DELETE'; body?: unknown; signal?: AbortSignal }
+type RequestOptions = { method?: 'GET' | 'POST' | 'PUT' | 'DELETE'; body?: unknown; signal?: AbortSignal; idempotencyKey?: string }
 export type SessionAccess = { token: () => string | null; refresh: () => Promise<boolean> }
 
 export function createHttpClient(baseUrl: string, session?: SessionAccess, transport: typeof fetch = fetch) {
@@ -21,6 +21,7 @@ export function createHttpClient(baseUrl: string, session?: SessionAccess, trans
       const headers = new Headers({ Accept: 'application/json' })
       const token = session?.token()
       if (token) headers.set('Authorization', `Bearer ${token}`)
+      if (options.idempotencyKey) headers.set('Idempotency-Key', options.idempotencyKey)
       if (options.body !== undefined) headers.set('Content-Type', 'application/json')
       return transport(`${baseUrl}${path}`, {
         method: options.method ?? 'GET', headers,

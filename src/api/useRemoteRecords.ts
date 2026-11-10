@@ -1,3 +1,4 @@
+import { roomsRepository } from './pos'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { apiConfig } from './config'
@@ -21,7 +22,7 @@ export function useRemoteRecords(moduleId: string, page: number, query: string, 
   const [search, setSearch] = useState(query)
   useEffect(() => { const timer = window.setTimeout(() => setSearch(query), 200); return () => window.clearTimeout(timer) }, [query])
   const client = useQueryClient()
-  const groups = useQuery({ queryKey: ['api', scope, 'groups'], queryFn: ({ signal }) => groupsRepository.list(signal), enabled: enabled && moduleId !== 'menu-items' })
+  const groups = useQuery({ queryKey: ['api', scope, 'groups'], queryFn: ({ signal }) => groupsRepository.list(signal), enabled: enabled && ['customers', 'customer-groups'].includes(moduleId) })
   const categories = useQuery({ queryKey: ['api', scope, 'categories'], queryFn: ({ signal }) => categoriesRepository.list(signal), enabled: enabled && moduleId === 'menu-items' })
   const productSort: Record<string, string> = { name: 'name', code: 'sku', price: 'price_vnd' }
   const customerSort: Record<string, string> = { name: 'name', points: 'points' }
@@ -41,7 +42,8 @@ export function useRemoteRecords(moduleId: string, page: number, query: string, 
       const result = await customersRepository.list(pageOptions, signal)
       return { rows: result.items.map(customerRow), total: result.pagination.total, pages: result.pagination.total_pages }
   }
-  const listEnabled = enabled && moduleId !== 'customer-groups' && (moduleId !== 'customers' || groups.isSuccess)
+  const roomData = useQuery({ queryKey: ['api', scope, 'rooms'], enabled: enabled && moduleId === 'rooms', queryFn: ({ signal }) => roomsRepository.list(signal) })
+  const listEnabled = enabled && moduleId !== 'rooms' && moduleId !== 'customer-groups' && (moduleId !== 'customers' || groups.isSuccess)
   const records = useQuery({
     queryKey: ['api', scope, moduleId, options], enabled: listEnabled && !mobile,
     queryFn: ({ signal }) => fetchPage(page, signal),
@@ -56,8 +58,9 @@ export function useRemoteRecords(moduleId: string, page: number, query: string, 
   let total = (mobile ? infinite.data?.pages[0]?.total : records.data?.total) ?? 0
   let pages = (mobile ? infinite.data?.pages[0]?.pages : records.data?.pages) ?? 1
   let groupExportRows: ManagementRow[] = []
-  if (moduleId === 'customer-groups') {
-    const matches = (groups.data ?? []).map(groupRow).filter((row) => Object.values(row).some((value) => String(value).toLocaleLowerCase('vi').includes(search.toLocaleLowerCase('vi'))))
+  if (moduleId === 'customer-groups' || moduleId === 'rooms') {
+    const collection = moduleId === 'rooms' ? (roomData.data ?? []).map((r) => ({ __id: r.id, name: r.name, note: r.note })) : (groups.data ?? []).map(groupRow)
+    const matches = collection.filter((row) => Object.values(row).some((value) => String(value).toLocaleLowerCase('vi').includes(search.toLocaleLowerCase('vi'))))
     if (sort) matches.sort((a, b) => (typeof a[sort] === 'number' && typeof b[sort] === 'number' ? Number(a[sort]) - Number(b[sort]) : String(a[sort] ?? '').localeCompare(String(b[sort] ?? ''), 'vi')) * (ascending ? 1 : -1))
     groupExportRows = matches
     total = matches.length; pages = Math.ceil(total / 6); rows = mobile ? matches : matches.slice((page - 1) * 6, page * 6)
@@ -68,17 +71,18 @@ export function useRemoteRecords(moduleId: string, page: number, query: string, 
     mutationFn: async ({ values, initial }: { values: ManagementRow; initial: ManagementRow | null }) => {
       const row = { ...initial, ...values }
       const id = initial ? String(initial.__id) : undefined
+      if (moduleId === 'rooms') await roomsRepository.save({ name: String(row.name), note: String(row.note ?? '') }, id)
       if (moduleId === 'menu-items') await menuItemsRepository.save(productInput(row, categories.data ?? []), id)
       if (moduleId === 'customers') await customersRepository.save(customerInput(row, groups.data ?? [], canManage), id)
       if (moduleId === 'customer-groups') await groupsRepository.save(groupInput(row), id)
     }, onSuccess: invalidate,
   })
-  const remove = useMutation({ mutationFn: (id: string) => moduleId === 'menu-items' ? menuItemsRepository.remove(id) : moduleId === 'customers' ? customersRepository.remove(id) : groupsRepository.remove(id), onSuccess: invalidate })
+  const remove = useMutation({ mutationFn: (id: string) => moduleId === 'rooms' ? roomsRepository.remove(id) : moduleId === 'menu-items' ? menuItemsRepository.remove(id) : moduleId === 'customers' ? customersRepository.remove(id) : groupsRepository.remove(id), onSuccess: invalidate })
   const createCategory = useMutation({ mutationFn: (name: string) => categoriesRepository.save(name), onSuccess: invalidate })
-  const loading = remote && (search !== query || (moduleId === 'customer-groups' ? groups.isPending : mobile ? infinite.isPending : records.isPending) || (moduleId === 'menu-items' ? categories.isPending : groups.isPending))
-  const error = enabled ? (mobile ? infinite.error : records.error) ?? groups.error ?? categories.error : null
+  const loading = remote && (search !== query || (moduleId === 'rooms' ? roomData.isPending : moduleId === 'customer-groups' ? groups.isPending : mobile ? infinite.isPending : records.isPending) || (moduleId === 'menu-items' ? categories.isPending : moduleId === 'customers' ? groups.isPending : false))
+  const error = enabled ? (mobile ? infinite.error : records.error) ?? groups.error ?? categories.error ?? roomData.error : null
   const exportRows = async () => {
-    if (moduleId === 'customer-groups') return groupExportRows
+    if (moduleId === 'customer-groups' || moduleId === 'rooms') return groupExportRows
     const output: ManagementRow[] = []
     let pageNumber = 1
     let totalPages = 1
@@ -102,12 +106,12 @@ export function useRemoteRecords(moduleId: string, page: number, query: string, 
   return {
     remote, rows, total, pages: Math.max(1, pages), loading, error: error ? errorMessage(error) : '',
     mobile, loadMore: infinite.fetchNextPage,
-    hasMore: remote && mobile && moduleId !== 'customer-groups' && search === query && infinite.hasNextPage,
+    hasMore: remote && mobile && moduleId !== 'customer-groups' && moduleId !== 'rooms' && search === query && infinite.hasNextPage,
     fetchingMore: infinite.isFetchingNextPage,
     categories: categories.data ?? [], groups: groups.data ?? [], canManage,
     pending: save.isPending || remove.isPending || createCategory.isPending,
     save: save.mutateAsync, remove: remove.mutateAsync, createCategory: createCategory.mutateAsync,
     retry: invalidate, exportRows,
-    canSort: (key: string) => moduleId === 'customer-groups' || Boolean((moduleId === 'menu-items' ? productSort : customerSort)[key]),
+    canSort: (key: string) => moduleId === 'customer-groups' || moduleId === 'rooms' || Boolean((moduleId === 'menu-items' ? productSort : customerSort)[key]),
   }
 }

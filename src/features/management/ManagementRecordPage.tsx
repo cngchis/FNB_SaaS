@@ -122,7 +122,7 @@ function PurchaseWorkspace() {
 }
 
 function RecordWorkspace({ module }: { module: ManagementModule }) {
-  const [localRows, setRows] = useState(() => !apiConfig.useMock && ['menu-items', 'customers', 'customer-groups'].includes(module.id) ? [] : loadRows(module))
+  const [localRows, setRows] = useState(() => !apiConfig.useMock && ['menu-items', 'customers', 'customer-groups', 'rooms'].includes(module.id) ? [] : loadRows(module))
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState('Tất cả')
   const [sortKey, setSortKey] = useState<string | null>(null)
