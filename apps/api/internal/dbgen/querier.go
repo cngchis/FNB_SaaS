@@ -47,6 +47,8 @@ type Querier interface {
 	ListRooms(ctx context.Context, arg ListRoomsParams) ([]ListRoomsRow, error)
 	LockProduct(ctx context.Context, arg LockProductParams) (Product, error)
 	NextProductNumber(ctx context.Context, tenantID pgtype.UUID) (int64, error)
+	// A single statement gives rows, payment totals and metrics the same snapshot.
+	ReadInvoices(ctx context.Context, arg ReadInvoicesParams) ([]byte, error)
 	UpdateCustomer(ctx context.Context, arg UpdateCustomerParams) (Customer, error)
 	UpdateCustomerGroup(ctx context.Context, arg UpdateCustomerGroupParams) (CustomerGroup, error)
 	UpdateProduct(ctx context.Context, arg UpdateProductParams) (Product, error)

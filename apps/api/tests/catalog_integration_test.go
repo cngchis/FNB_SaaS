@@ -19,6 +19,7 @@ import (
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/config"
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/auth"
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/customer"
+	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/invoice"
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/pos"
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/product"
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/room"
@@ -193,6 +194,7 @@ func moduleTestFixture(t *testing.T) moduleFixture {
 	customer.RegisterRoutes(secured, runtime)
 	room.RegisterRoutes(secured, runtime)
 	pos.RegisterRoutes(secured, runtime)
+	invoice.RegisterRoutes(secured, runtime)
 	server = httptest.NewServer(engine)
 	f.base = server.URL
 	f.client = server.Client()

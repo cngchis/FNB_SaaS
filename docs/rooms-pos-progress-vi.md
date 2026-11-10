@@ -1,5 +1,7 @@
 # Tiến độ Phòng/Bàn và POS thật
 
+> **Cập nhật sau đợt POS:** trang Management Hóa đơn đã nối API. Xem [tiến độ Hóa đơn](./invoices-api-progress-vi.md). Các ghi chú “Hóa đơn Management còn prototype” dưới đây là trạng thái lịch sử.
+
 Ngày cập nhật: 10/11/2026.
 
 ## Đã triển khai

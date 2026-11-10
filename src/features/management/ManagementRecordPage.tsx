@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom'
 import { useRemoteRecords } from '../../api/useRemoteRecords'
 import { errorMessage } from '../../api/recordAdapter'
 import { apiConfig } from '../../api/config'
@@ -122,7 +123,8 @@ function PurchaseWorkspace() {
 }
 
 function RecordWorkspace({ module }: { module: ManagementModule }) {
-  const [localRows, setRows] = useState(() => !apiConfig.useMock && ['menu-items', 'customers', 'customer-groups', 'rooms'].includes(module.id) ? [] : loadRows(module))
+  const navigate = useNavigate()
+  const [localRows, setRows] = useState(() => !apiConfig.useMock && ['menu-items', 'customers', 'customer-groups', 'rooms', 'invoices'].includes(module.id) ? [] : loadRows(module))
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState('Tất cả')
   const [sortKey, setSortKey] = useState<string | null>(null)
@@ -144,7 +146,7 @@ function RecordWorkspace({ module }: { module: ManagementModule }) {
   const [dateTo, setDateTo] = useState('')
   const [branchFilter, setBranchFilter] = useState('Tất cả chi nhánh')
 
-  const remote = useRemoteRecords(module.id, page, query, filter, sortKey, ascending)
+  const remote = useRemoteRecords(module.id, page, query, filter, sortKey, ascending, { from: dateFrom, to: dateTo })
   const footerRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!remote.hasMore || remote.fetchingMore || remote.loading || !footerRef.current) return
@@ -243,15 +245,15 @@ function RecordWorkspace({ module }: { module: ManagementModule }) {
   }
 
   return <section className={`record-page record-page-${module.id}`}>
-    <div className="page-title-row"><div><div className="record-breadcrumb">Quản lý cửa hàng <span>/</span> {module.title}</div><h1>{module.title}</h1><p>{module.description}</p></div><div className="record-actions"><button className="button button-secondary" type="button" onClick={exportCsv}><Download size={15} /> Xuất file</button><button className="button button-primary" type="button" disabled={remote.remote && (remote.loading || Boolean(remote.error))} onClick={() => { setFailure(''); setEditing(null); setFormOpen(true) }}><Plus size={16} /> Thêm {module.entity}</button></div></div>
+    <div className="page-title-row"><div><div className="record-breadcrumb">Quản lý cửa hàng <span>/</span> {module.title}</div><h1>{module.title}</h1><p>{module.description}</p></div><div className="record-actions"><button className="button button-secondary" type="button" onClick={exportCsv}><Download size={15} /> Xuất file</button><button className="button button-primary" type="button" disabled={remote.remote && (remote.loading || Boolean(remote.error))} onClick={() => { setFailure(''); if (remote.remote && module.id === 'invoices') { navigate('/pos'); return }; setEditing(null); setFormOpen(true) }}><Plus size={16} /> Thêm {module.entity}</button></div></div>
 
     {module.id === 'cashbook' && <div className="record-filters cashbook-tabs">{['Tiền mặt', 'Ngân hàng', 'Tổng quỹ'].map((tab) => <button type="button" key={tab} className={cashTab === tab ? 'active' : ''} onClick={() => setCashTab(tab)}>{tab}</button>)}{cashTab === 'Ngân hàng' && <a className="button button-secondary" href="/management/bank-accounts">Tài khoản ngân hàng</a>}</div>}
-    <div className="record-metrics">{module.metrics.map((item, index) => { const metric = remote.remote ? { ...item, value: index === 0 && !remote.loading && !remote.error ? String(remote.total) : '—', hint: index === 0 ? 'Theo bộ lọc hiện tại' : 'Chưa có báo cáo tổng hợp' } : item; return <article className="record-metric" key={metric.label}><span>{metric.label}</span><strong>{metric.value}</strong><small>{metric.hint}</small></article> })}</div>
+    <div className="record-metrics">{module.metrics.map((item, index) => { const invoiceSummary = remote.summary; const metric = remote.remote && module.id === 'invoices' && invoiceSummary && !remote.loading && !remote.error ? { ...item, value: index === 0 ? String(invoiceSummary.today_count) : index === 1 ? formatCurrency(invoiceSummary.total_vnd) : String(invoiceSummary.unpaid_count), hint: index === 0 ? 'Trong hôm nay, theo bộ lọc hiện tại' : index === 1 ? 'Giá trị hóa đơn theo bộ lọc hiện tại' : 'Hóa đơn chưa thanh toán đủ theo bộ lọc' } : remote.remote ? { ...item, value: index === 0 && !remote.loading && !remote.error ? String(remote.total) : '—', hint: index === 0 ? 'Theo bộ lọc hiện tại' : 'Chưa có báo cáo tổng hợp' } : item; return <article className="record-metric" key={metric.label}><span>{metric.label}</span><strong>{metric.value}</strong><small>{metric.hint}</small></article> })}</div>
 
     <section className="panel record-table-panel">
       <div className="record-toolbar"><label className="search-field"><Search size={16} /><input aria-label={module.searchPlaceholder} value={query} onChange={(event) => { setQuery(event.target.value); setPage(1) }} placeholder={module.searchPlaceholder} /><kbd>⌘ K</kbd></label>{module.id === 'cashbook' && <div className="cashbook-date-filters"><label>Từ<input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} /></label><label>Đến<input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} /></label><select aria-label="Chi nhánh sổ quỹ" value={branchFilter} onChange={(event) => setBranchFilter(event.target.value)}><option>Tất cả chi nhánh</option><option>Mộc Store · Quận 1</option><option>Mộc Store · Quận 3</option></select></div>}<div className="record-filters"><button type="button" className={filter === 'Tất cả' ? 'active' : ''} onClick={() => { setFilter('Tất cả'); setPage(1) }}>Tất cả</button>{(remote.remote && module.id === 'customers' ? remote.groups.map((group) => group.name) : module.filters)?.map((item) => <button type="button" key={item} className={filter === item ? 'active' : ''} onClick={() => { setFilter(item); setPage(1) }}>{item}</button>)}</div></div>
       <div className="table-scroll"><table className="data-table record-table"><thead><tr>{module.columns.map((column) => <th key={column.key}><button type="button" onClick={() => toggleSort(column.key)}>{column.label}<span aria-hidden="true">{sortKey === column.key ? ascending ? ' ↑' : ' ↓' : ' ↕'}</span></button></th>)}<th aria-label="Thao tác" /></tr></thead><tbody>
-        {visibleRows.map((row, rowIndex) => <FragmentRow key={`${module.id}-${row.__id ?? row.code ?? row.name ?? row.employee ?? rowIndex}-${rowIndex}`} module={module} row={row} expanded={expandedRow === String(row.__id ?? row.code ?? row.name ?? rowIndex)} onExpand={() => setExpandedRow((current) => current === String(row.__id ?? row.code ?? row.name ?? rowIndex) ? null : String(row.__id ?? row.code ?? row.name ?? rowIndex))} onEdit={() => { setFailure(''); setEditing(row); setFormOpen(true) }} onDelete={() => { setFailure(''); setDeleteTarget(row) }} />)}
+        {visibleRows.map((row, rowIndex) => <FragmentRow key={`${module.id}-${row.__id ?? row.code ?? row.name ?? row.employee ?? rowIndex}-${rowIndex}`} module={module} row={row} expanded={expandedRow === String(row.__id ?? row.code ?? row.name ?? rowIndex)} onExpand={() => setExpandedRow((current) => current === String(row.__id ?? row.code ?? row.name ?? rowIndex) ? null : String(row.__id ?? row.code ?? row.name ?? rowIndex))} onEdit={() => { if (remote.remote && module.id === 'invoices') { setExpandedRow(String(row.__id)); setFailure('Hóa đơn đã phát hành chỉ được tra cứu; không sửa số tiền đã ghi nhận.'); return }; setFailure(''); setEditing(row); setFormOpen(true) }} onDelete={() => { if (remote.remote && module.id === 'invoices') { setFailure('Không thể xóa hóa đơn đã phát hành. Cần quy trình hủy hoặc hoàn tiền.'); return }; setFailure(''); setDeleteTarget(row) }} />)}
       </tbody></table></div>
       {!remote.loading && !remote.error && filteredRows.length === 0 && <div className="empty-state"><Search size={23} /><strong>Không tìm thấy dữ liệu</strong><span>Thử thay đổi từ khóa hoặc bộ lọc.</span></div>}
       {remote.remote && (remote.loading || remote.error) && <div className="empty-state" role={remote.error ? 'alert' : 'status'}><strong>{remote.error || 'Đang tải dữ liệu...'}</strong>{remote.error && <button className="button button-secondary" type="button" onClick={() => void remote.retry()}>Thử lại</button>}</div>}

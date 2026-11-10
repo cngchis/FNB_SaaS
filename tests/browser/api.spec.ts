@@ -270,3 +270,80 @@ test('real POS: rooms, isolated tabs, ordering rounds, cash and invoice', async 
   }
   expect(errors).toEqual([])
 })
+
+test('real Management invoices: POS data, filtering, export, pagination and read-only actions', async ({ page, request }, info) => {
+  test.skip(!tenant || !email || !password, 'Use the isolated native PostgreSQL fixture.')
+  const errors: string[] = []
+  page.on('pageerror', (error) => errors.push(error.message))
+  const auth = await request.post(`${base}/api/v1/auth/login`, { data: { tenant_slug: tenant, email, password } })
+  const { data: session } = await auth.json()
+  const headers = { Authorization: `Bearer ${session.access_token}` }
+  const suffix = `${info.project.name}-${Date.now()}`
+  const name = `Invoice customer ${suffix}`
+  const productResponse = await request.post(`${base}/api/v1/products`, { headers, data: { name: `Invoice drink ${suffix}`, product_type: 'prepared', price_vnd: 10000 } })
+  expect(productResponse.status()).toBe(201)
+  const product = (await productResponse.json()).data
+  const customerResponse = await request.post(`${base}/api/v1/customers`, { headers, data: { name } })
+  expect(customerResponse.status()).toBe(201)
+  const customer = (await customerResponse.json()).data
+  const invoiceCodes: string[] = []
+  for (let i = 0; i < 8; i++) {
+    const saved = await request.post(`${base}/api/v1/pos/orders`, { headers: { ...headers, 'Idempotency-Key': `web-invoice-order-${suffix}-${i}` }, data: { customer_id: customer.id, discount_vnd: 1000, items: [{ product_id: product.id, quantity: 2 }] } })
+    expect(saved.status()).toBe(201)
+    const order = (await saved.json()).data
+    const payment = await request.post(`${base}/api/v1/pos/orders/${order.id}/payments`, { headers: { ...headers, 'Idempotency-Key': `web-invoice-pay-${suffix}-${i}` }, data: { received_vnd: i === 0 ? 5000 : 19000 } })
+    expect(payment.status()).toBe(200)
+    invoiceCodes.push((await payment.json()).data.order.invoice_code)
+  }
+  await page.addInitScript(() => localStorage.setItem('fnb-management:invoices', JSON.stringify([{ code: 'POISON-INVOICE' }])))
+  await signIn(page, '/management/invoices')
+  const search = page.getByRole('textbox', { name: 'Tìm mã hóa đơn hoặc khách hàng...', exact: true })
+  await search.fill(name)
+  await expect(page.getByText('POISON-INVOICE')).toHaveCount(0)
+  await expect(page.locator('.record-metric').nth(1)).toContainText('152.000')
+  await expect(page.locator('.record-metric').nth(2).locator('strong')).toHaveText('1')
+  if (info.project.name === 'desktop') {
+    await expect(page.locator('.record-expandable-row')).toHaveCount(6)
+    await page.getByRole('button', { name: 'Trang sau', exact: true }).click()
+    await expect(page.locator('.record-expandable-row')).toHaveCount(2)
+  } else {
+    await page.locator('.record-page .table-footer').scrollIntoViewIfNeeded()
+    await expect(page.locator('.record-expandable-row')).toHaveCount(8)
+  }
+  const downloadEvent = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Xuất file', exact: true }).click()
+  const csv = await readFile((await (await downloadEvent).path())!, 'utf8')
+  for (const code of invoiceCodes) expect(csv).toContain(code)
+  await page.locator('.record-filters').getByRole('button', { name: 'Chờ thanh toán', exact: true }).click()
+  const row = page.locator('.record-expandable-row')
+  await expect(row).toHaveCount(1)
+  await expect(row).toContainText(invoiceCodes[0])
+  await row.click()
+  const detail = page.locator('.record-detail-content')
+  await expect(detail).toContainText(`Invoice drink ${suffix} × 2`)
+  await expect(detail).toContainText('Giảm giá: 1.000')
+  await expect(detail).toContainText('Khách đã trả: 5.000')
+  await page.screenshot({ path: info.outputPath('management-api-invoice-detail.png') })
+  await row.getByRole('button', { name: /^Sửa / }).click()
+  await expect(page.getByRole('alert')).toContainText('chỉ được tra cứu')
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await row.getByRole('button', { name: /^Xóa / }).click()
+  await expect(page.getByRole('alert')).toContainText('Không thể xóa hóa đơn')
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await page.locator('.record-filters').getByRole('button', { name: 'Đã hủy', exact: true }).click()
+  await expect(page.getByText('Không tìm thấy dữ liệu', { exact: true })).toBeVisible()
+  await page.locator('.record-filters').getByRole('button', { name: 'Đã thanh toán', exact: true }).click()
+  await expect(page.locator('.record-expandable-row').first()).toBeVisible()
+  await signIn(page, '/management/invoices')
+  await search.fill(invoiceCodes[0])
+  await expect(page.locator('.record-expandable-row')).toHaveCount(1)
+  await page.route('**/api/v1/invoices?**', (route) => route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: { code: 'internal_error', message: 'fixture failure' } }) }))
+  await search.fill('Network error fixture')
+  await expect(page.getByRole('alert')).toContainText('Không thể tải hoặc lưu dữ liệu')
+  await page.unroute('**/api/v1/invoices?**')
+  await search.fill(invoiceCodes[0])
+  await expect(page.locator('.record-expandable-row')).toHaveCount(1)
+  await page.getByRole('button', { name: 'Thêm hóa đơn', exact: true }).click()
+  await expect(page).toHaveURL('/pos')
+  expect(errors).toEqual([])
+})

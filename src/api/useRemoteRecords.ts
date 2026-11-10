@@ -1,3 +1,4 @@
+import { useInvoiceRecords } from './useInvoiceRecords'
 import { roomsRepository } from './pos'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
@@ -7,7 +8,7 @@ import { menuItemsRepository, customersRepository, categoriesRepository, groupsR
 import { connectedModules, customerInput, customerRow, errorMessage, groupInput, groupRow, productInput, productRow } from './recordAdapter'
 import type { ManagementRow } from '../features/management/moduleConfig'
 
-export function useRemoteRecords(moduleId: string, page: number, query: string, filter: string, sort: string | null, ascending: boolean) {
+export function useRemoteRecords(moduleId: string, page: number, query: string, filter: string, sort: string | null, ascending: boolean, dates: { from?: string; to?: string } = {}) {
   const session = useSessionStore((state) => state.session)
   const remote = !apiConfig.useMock && connectedModules.has(moduleId)
   const enabled = remote && session !== null
@@ -43,7 +44,8 @@ export function useRemoteRecords(moduleId: string, page: number, query: string, 
       return { rows: result.items.map(customerRow), total: result.pagination.total, pages: result.pagination.total_pages }
   }
   const roomData = useQuery({ queryKey: ['api', scope, 'rooms'], enabled: enabled && moduleId === 'rooms', queryFn: ({ signal }) => roomsRepository.list(signal) })
-  const listEnabled = enabled && moduleId !== 'rooms' && moduleId !== 'customer-groups' && (moduleId !== 'customers' || groups.isSuccess)
+  const invoiceData = useInvoiceRecords(enabled && moduleId === 'invoices', scope, mobile, page, search, filter, sort, ascending, dates)
+  const listEnabled = enabled && moduleId !== 'invoices' && moduleId !== 'rooms' && moduleId !== 'customer-groups' && (moduleId !== 'customers' || groups.isSuccess)
   const records = useQuery({
     queryKey: ['api', scope, moduleId, options], enabled: listEnabled && !mobile,
     queryFn: ({ signal }) => fetchPage(page, signal),
@@ -69,6 +71,7 @@ export function useRemoteRecords(moduleId: string, page: number, query: string, 
   const canManage = session?.user.role === 'owner' || session?.user.role === 'manager'
   const save = useMutation({
     mutationFn: async ({ values, initial }: { values: ManagementRow; initial: ManagementRow | null }) => {
+      if (moduleId === 'invoices') throw new Error('Hóa đơn đã phát hành chỉ được tra cứu; hãy tạo hoặc thu tiền qua POS.')
       const row = { ...initial, ...values }
       const id = initial ? String(initial.__id) : undefined
       if (moduleId === 'rooms') await roomsRepository.save({ name: String(row.name), note: String(row.note ?? '') }, id)
@@ -77,7 +80,7 @@ export function useRemoteRecords(moduleId: string, page: number, query: string, 
       if (moduleId === 'customer-groups') await groupsRepository.save(groupInput(row), id)
     }, onSuccess: invalidate,
   })
-  const remove = useMutation({ mutationFn: (id: string) => moduleId === 'rooms' ? roomsRepository.remove(id) : moduleId === 'menu-items' ? menuItemsRepository.remove(id) : moduleId === 'customers' ? customersRepository.remove(id) : groupsRepository.remove(id), onSuccess: invalidate })
+  const remove = useMutation({ mutationFn: (id: string) => moduleId === 'invoices' ? Promise.reject(new Error('Không thể xóa hóa đơn đã phát hành. Cần quy trình hủy hoặc hoàn tiền.')) : moduleId === 'rooms' ? roomsRepository.remove(id) : moduleId === 'menu-items' ? menuItemsRepository.remove(id) : moduleId === 'customers' ? customersRepository.remove(id) : groupsRepository.remove(id), onSuccess: invalidate })
   const createCategory = useMutation({ mutationFn: (name: string) => categoriesRepository.save(name), onSuccess: invalidate })
   const loading = remote && (search !== query || (moduleId === 'rooms' ? roomData.isPending : moduleId === 'customer-groups' ? groups.isPending : mobile ? infinite.isPending : records.isPending) || (moduleId === 'menu-items' ? categories.isPending : moduleId === 'customers' ? groups.isPending : false))
   const error = enabled ? (mobile ? infinite.error : records.error) ?? groups.error ?? categories.error ?? roomData.error : null
@@ -103,6 +106,7 @@ export function useRemoteRecords(moduleId: string, page: number, query: string, 
     if (!current || `${current.tenant_id}:${current.store_id}:${current.user.id}` !== scope) throw new Error('Phiên đã thay đổi. Vui lòng xuất file lại.')
     return output
   }
+  const invoice = moduleId === 'invoices'
   return {
     remote, rows, total, pages: Math.max(1, pages), loading, error: error ? errorMessage(error) : '',
     mobile, loadMore: infinite.fetchNextPage,
@@ -112,6 +116,8 @@ export function useRemoteRecords(moduleId: string, page: number, query: string, 
     pending: save.isPending || remove.isPending || createCategory.isPending,
     save: save.mutateAsync, remove: remove.mutateAsync, createCategory: createCategory.mutateAsync,
     retry: invalidate, exportRows,
+    summary: invoice ? invoiceData.summary : undefined,
     canSort: (key: string) => moduleId === 'customer-groups' || moduleId === 'rooms' || Boolean((moduleId === 'menu-items' ? productSort : customerSort)[key]),
+    ...(invoice ? { rows: invoiceData.rows, total: invoiceData.total, pages: invoiceData.pages, loading: remote && (search !== query || invoiceData.loading), error: invoiceData.error ? errorMessage(invoiceData.error) : '', hasMore: search === query && invoiceData.hasMore, fetchingMore: invoiceData.fetchingMore, loadMore: invoiceData.loadMore, canSort: invoiceData.canSort, exportRows: invoiceData.exportRows } : {}),
   }
 }

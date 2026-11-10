@@ -1,5 +1,7 @@
 # Tiến độ tích hợp frontend với API
 
+> **Cập nhật Hóa đơn:** `/management/invoices` đã nối dữ liệu POS thật. Xem [tiến độ Hóa đơn](./invoices-api-progress-vi.md); các mục bên dưới ghi lại giai đoạn trước.
+
 > **Cập nhật mới nhất:** Phòng/Bàn và POS tiền mặt đã nối API. Xem [tiến độ POS](./rooms-pos-progress-vi.md) trước khi đọc các mục lịch sử bên dưới; những ghi chú “POS chưa triển khai” chỉ phản ánh giai đoạn trước.
 
 **Ngày:** 10/11/2026. **Trạng thái:** đã nối Món, tạo Nhóm hàng trong dropdown, Khách hàng và Nhóm khách với API thật. Người dùng đã duyệt các ngoại lệ UI giới hạn trước khi triển khai. Chế độ mock vẫn là mặc định.

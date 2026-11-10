@@ -3,6 +3,7 @@ import base from './playwright.config'
 
 export default defineConfig({
   ...base,
+  outputDir: './test-results/api',
   testMatch: '**/api.spec.ts',
   timeout: 120_000,
   use: { ...base.use, baseURL: 'http://127.0.0.1:5189', trace: 'off', actionTimeout: 10_000 },

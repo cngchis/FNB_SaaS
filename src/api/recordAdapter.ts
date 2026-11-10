@@ -3,7 +3,7 @@ import type { ManagementRow } from '../features/management/moduleConfig'
 import type { ProductDTO, ProductInput, CustomerDTO, CustomerInput, GroupDTO, GroupInput } from './catalog'
 import { ApiError } from './http'
 
-export const connectedModules = new Set(['menu-items', 'customers', 'customer-groups', 'rooms'])
+export const connectedModules = new Set(['menu-items', 'customers', 'customer-groups', 'rooms', 'invoices'])
 export function productRow(item: ProductDTO): ManagementRow {
   return {
     __id: item.id, code: item.sku, name: item.name, category: item.category_name ?? '',
