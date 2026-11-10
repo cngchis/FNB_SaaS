@@ -4,6 +4,31 @@ Go API foundation for the existing FNB SaaS frontend. The API is a modular monol
 
 ## Local development
 
+### Saved native backend configuration
+
+`make api-run` (also available as `make api-run-local`) automatically reads
+[`apps/api/.env`](./.env) when present. Without that file it uses the exported
+environment as before. This does not change the container startup command or
+load secrets into Vite's frontend configuration.
+
+For a fresh checkout, copy [`.env.example`](./.env.example) to `.env` inside
+`apps/api`, set `PGPASSWORD` to the runtime `fnb_app` password, and replace
+`JWT_SECRET` with a value generated once using `openssl rand -hex 32`.
+Keep values shell-quoted as shown in the example and protect the file with
+`chmod 600 apps/api/.env` from the project root. The file is ignored by Git.
+Do not put backend passwords or JWT signing secrets in frontend `VITE_*` values.
+
+Then each startup from the project root only needs:
+
+```bash
+make api-run
+```
+
+The file's values take precedence over exported variables for this local target.
+Migration and bootstrap commands still use their separately exported admin
+configuration; they do not read this runtime `.env` file. A direct
+`go run ./cmd/api` also still requires exported environment variables.
+
 Requirements for native local development: Go 1.22+, PostgreSQL 16, and goose CLI. Docker Compose is optional. `make sqlc` runs the pinned SQLC v1.29.0 CLI through Go.
 
 1. In pgAdmin, create or select a local database (default name: `fnb_saas`) and create the runtime role before applying migrations. Use a strong local password in place of the placeholder:

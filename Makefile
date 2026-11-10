@@ -1,6 +1,6 @@
 COMPOSE = docker compose --env-file deploy/.env -f deploy/docker-compose.yml
 
-.PHONY: up down logs migrate-up migrate-down bootstrap api-run api-build api-test migrate-up-local migrate-down-local bootstrap-local sqlc
+.PHONY: up down logs migrate-up migrate-down bootstrap api-run api-run-local api-build api-test migrate-up-local migrate-down-local bootstrap-local sqlc
 
 up:
 	$(COMPOSE) up --build
@@ -21,7 +21,9 @@ bootstrap:
 	$(COMPOSE) --profile tools run --rm bootstrap
 
 api-run:
-	cd apps/api && go run ./cmd/api
+	cd apps/api && sh -ec 'set -a; if [ -f .env ]; then . ./.env; fi; set +a; exec go run ./cmd/api'
+
+api-run-local: api-run
 
 api-build:
 	cd apps/api && go build ./...
