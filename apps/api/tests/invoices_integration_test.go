@@ -76,7 +76,7 @@ func TestInvoicesReadModel(t *testing.T) {
 		}
 	}
 	// Unsaved/estimated orders are not issued invoices.
-	call("POST", "/pos/orders", f.cashier, "invoice-draft-00001", map[string]any{"items": []any{map[string]any{"product_id": product.Data.ID, "quantity": 1}}}, 201, nil)
+	call("POST", "/pos/orders", f.cashier, "invoice-draft-00001", map[string]any{"customer_id": customer.Data.ID, "items": []any{map[string]any{"product_id": product.Data.ID, "quantity": 1}}}, 201, nil)
 	var list moduleEnvelope[invoiceapi.Result]
 	call("GET", "/invoices?page_size=2&sort=code&direction=asc", f.owner, "", nil, 200, &list)
 	if list.Data.Pagination.Total != 8 || list.Data.Pagination.TotalPages != 4 || len(list.Data.Items) != 2 || list.Data.Summary.Total != 152000 || list.Data.Summary.UnpaidCount != 1 || list.Data.Summary.Unpaid != 14000 {
@@ -123,6 +123,46 @@ func TestInvoicesReadModel(t *testing.T) {
 	}
 	call("GET", "/invoices", f.kitchen, "", nil, 403, nil)
 	call("GET", "/invoices/not-a-uuid", f.owner, "", nil, 400, nil)
+
+	// Debt is store-scoped, excludes drafts and can exclude the current cart order.
+	var balance moduleEnvelope[struct {
+		Amount int64 `json:"outstanding_vnd"`
+	}]
+	debtPath := "/customers/" + customer.Data.ID + "/debt"
+	call("DELETE", "/customers/"+customer.Data.ID, f.owner, "", nil, 409, nil)
+	call("GET", debtPath, f.cashier, "", nil, 200, &balance)
+	if balance.Data.Amount != 14000 {
+		t.Fatalf("wrong outstanding balance: %d", balance.Data.Amount)
+	}
+	var firstInvoice moduleEnvelope[invoiceapi.Record]
+	call("GET", "/invoices/"+firstID, f.owner, "", nil, 200, &firstInvoice)
+	call("GET", debtPath+"?exclude_order_id="+firstInvoice.Data.OrderID, f.cashier, "", nil, 200, &balance)
+	if balance.Data.Amount != 0 {
+		t.Fatal("current invoice was counted twice")
+	}
+	call("GET", debtPath, f.otherStoreToken, "", nil, 200, &balance)
+	if balance.Data.Amount != 0 {
+		t.Fatal("debt leaked across stores")
+	}
+	call("GET", debtPath, f.otherOwner, "", nil, 404, nil)
+	call("GET", debtPath, f.kitchen, "", nil, 403, nil)
+	call("GET", debtPath+"?exclude_order_id=bad", f.owner, "", nil, 400, nil)
+	call("GET", debtPath+"?exclude_order_id="+f.otherStore, f.owner, "", nil, 404, nil)
+	var secondCustomer moduleEnvelope[catalogRecord]
+	call("POST", "/customers", f.owner, "", map[string]any{"name": "Other customer"}, 201, &secondCustomer)
+	call("PUT", "/pos/orders/"+firstInvoice.Data.OrderID, f.owner, "debt-reassign-key-0001", map[string]any{"version": 2, "customer_id": secondCustomer.Data.ID, "discount_vnd": 1000, "items": []any{map[string]any{"product_id": product.Data.ID, "quantity": 2}}}, 409, nil)
+	// Repeat a collection request after an unknown response without collecting twice.
+	paymentPath := "/pos/orders/" + firstInvoice.Data.OrderID + "/payments"
+	call("POST", paymentPath, f.cashier, "debt-collection-key-0001", map[string]any{"received_vnd": 14000}, 200, nil)
+	call("POST", paymentPath, f.cashier, "debt-collection-key-0001", map[string]any{"received_vnd": 14000}, 200, nil)
+	call("GET", debtPath, f.cashier, "", nil, 200, &balance)
+	if balance.Data.Amount != 0 {
+		t.Fatal("debt did not clear after settlement")
+	}
+	call("GET", "/invoices/"+firstID, f.owner, "", nil, 200, &firstInvoice)
+	if firstInvoice.Data.Paid != 19000 || firstInvoice.Data.Status != "paid" {
+		t.Fatal("duplicate collection or stale invoice")
+	}
 	call("POST", "/invoices", f.owner, "", map[string]any{}, 404, nil)
 	call("PUT", "/invoices/"+firstID, f.owner, "", map[string]any{"total_vnd": 1}, 404, nil)
 	call("DELETE", "/invoices/"+firstID, f.owner, "", nil, 404, nil)

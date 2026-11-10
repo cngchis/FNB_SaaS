@@ -54,6 +54,7 @@ export const categoriesRepository = {
   remove: (value: string) => request(`/product-categories/${pathID(value)}`, deleted, { method: 'DELETE' }),
 }
 export const customersRepository = {
+  debt: (value: string, exclude?: string | null, signal?: AbortSignal) => request('/customers/' + pathID(value) + '/debt' + (exclude ? '?exclude_order_id=' + pathID(exclude) : ''), z.object({ customer_id: id, outstanding_vnd: money }), { signal }),
   list: (options: ListOptions = {}, signal?: AbortSignal) => request(`/customers${query(options)}`, page(customerDetailsSchema), { signal }),
   get: (value: string, signal?: AbortSignal) => request(`/customers/${pathID(value)}`, customerDetailsSchema, { signal }),
   save: (body: CustomerInput, value?: string) => request(`/customers${value ? `/${pathID(value)}` : ''}`, customerSchema, { method: value ? 'PUT' : 'POST', body }),

@@ -1,5 +1,7 @@
 # Tiến độ tích hợp frontend với API
 
+> **Cập nhật công nợ:** đã nối dòng nợ trước đó và luồng thu thêm tiền trong POS. Xem [tiến độ công nợ](./customer-debt-progress-vi.md).
+
 > **Cập nhật Hóa đơn:** `/management/invoices` đã nối dữ liệu POS thật. Xem [tiến độ Hóa đơn](./invoices-api-progress-vi.md); các mục bên dưới ghi lại giai đoạn trước.
 
 > **Cập nhật mới nhất:** Phòng/Bàn và POS tiền mặt đã nối API. Xem [tiến độ POS](./rooms-pos-progress-vi.md) trước khi đọc các mục lịch sử bên dưới; những ghi chú “POS chưa triển khai” chỉ phản ánh giai đoạn trước.

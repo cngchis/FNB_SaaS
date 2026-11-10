@@ -347,3 +347,98 @@ test('real Management invoices: POS data, filtering, export, pagination and read
   await expect(page).toHaveURL('/pos')
   expect(errors).toEqual([])
 })
+
+test('customer debt: inline invoice details, resume and idempotent collection', async ({ page, request }, info) => {
+  test.skip(!tenant || !email || !password, 'Use the isolated native PostgreSQL fixture.')
+  const auth = await request.post(`${base}/api/v1/auth/login`, { data: { tenant_slug: tenant, email, password } })
+  const { data: session } = await auth.json()
+  const headers = { Authorization: `Bearer ${session.access_token}` }
+  const suffix = `${info.project.name}-${Date.now()}`
+  const customerResult = await request.post(`${base}/api/v1/customers`, { headers, data: { name: `Debt customer ${suffix}` } })
+  expect(customerResult.status()).toBe(201)
+  const customer = (await customerResult.json()).data
+  const productResult = await request.post(`${base}/api/v1/products`, { headers, data: { name: `Debt drink ${suffix}`, product_type: 'prepared', price_vnd: 35000 } })
+  expect(productResult.status()).toBe(201)
+  const product = (await productResult.json()).data
+  const orders: { id: string; code: string; invoice: string; room: string }[] = []
+  for (let i = 0; i < 3; i++) {
+    const roomResult = await request.post(`${base}/api/v1/rooms`, { headers, data: { name: `Debt table ${suffix}-${i}`, note: '' } })
+    expect(roomResult.status()).toBe(201)
+    const room = (await roomResult.json()).data
+    const saved = await request.post(`${base}/api/v1/pos/orders`, { headers: { ...headers, 'Idempotency-Key': `debt-order-${suffix}-${i}` }, data: { room_id: room.id, customer_id: customer.id, items: [{ product_id: product.id, quantity: i === 1 ? 2 : 1 }] } })
+    expect(saved.status()).toBe(201)
+    const order = (await saved.json()).data
+    let invoice = ''
+    if (i < 2) {
+      const payment = await request.post(`${base}/api/v1/pos/orders/${order.id}/payments`, { headers: { ...headers, 'Idempotency-Key': `debt-initial-payment-${suffix}-${i}` }, data: { received_vnd: i === 0 ? 5000 : 10000 } })
+      expect(payment.status()).toBe(200)
+      invoice = (await payment.json()).data.order.invoice_code
+    }
+    orders.push({ id: order.id, code: order.code, invoice, room: room.name })
+  }
+  await signIn(page, '/pos')
+  if (info.project.name === 'mobile') await page.getByRole('button', { name: 'Mở giỏ hàng', exact: true }).click()
+  await page.locator('.cart-metadata select').selectOption(customer.id)
+  const previousDebt = page.locator('.debt-line').filter({ hasText: 'Nợ trước đó' })
+  await expect(previousDebt).toContainText('90.000')
+  if (info.project.name === 'desktop') {
+    await page.getByRole('button', { name: 'Đơn hàng', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: 'Đơn hàng gần đây' })
+    const first = dialog.locator('.recent-order-row').filter({ hasText: orders[0].invoice })
+    const second = dialog.locator('.recent-order-row').filter({ hasText: orders[1].invoice })
+    await first.click()
+    expect(await first.evaluate((element) => element.nextElementSibling?.classList.contains('invoice-detail-panel'))).toBe(true)
+    await second.click()
+    await expect(first).toHaveAttribute('aria-expanded', 'false')
+    expect(await second.evaluate((element) => element.nextElementSibling?.classList.contains('invoice-detail-panel'))).toBe(true)
+    await expect(dialog.locator('.invoice-detail-panel')).toHaveCount(1)
+    await first.click()
+    await page.screenshot({ path: info.outputPath('inline-recent-invoice.png') })
+    await dialog.getByRole('button', { name: 'Mở đơn để thu thêm tiền', exact: true }).click()
+  } else {
+    await page.getByRole('button', { name: 'Thu gọn giỏ hàng', exact: true }).click()
+    await page.locator('.pos-table-grid button').filter({ hasText: orders[0].room }).click()
+    await page.getByRole('button', { name: 'Mở giỏ hàng', exact: true }).click()
+  }
+  await expect(page.locator('.order-type')).toContainText(orders[0].code)
+  await expect(previousDebt).toContainText('60.000')
+  await page.getByRole('button', { name: 'Tiền mặt', exact: true }).click()
+  const payment = page.getByRole('dialog', { name: 'Thanh toán tiền mặt' })
+  await expect(payment.locator('.payment-amount')).toContainText('30.000')
+  await payment.getByLabel('Khách thanh toán', { exact: true }).fill('30000')
+  let attempts = 0
+  const keys: string[] = []
+  await page.route(`**/api/v1/pos/orders/${orders[0].id}/payments`, async (route) => {
+    attempts++
+    keys.push(route.request().headers()['idempotency-key'])
+    if (attempts === 1) { const result = await route.fetch(); expect(result.status()).toBe(200); await route.abort('failed') }
+    else await route.continue()
+  })
+  await payment.getByRole('button', { name: 'Ghi nhận thanh toán', exact: true }).click()
+  await expect(payment.getByRole('alert')).toBeVisible()
+  await payment.getByRole('button', { name: 'Ghi nhận thanh toán', exact: true }).click()
+  await expect(page.getByRole('dialog')).toContainText('Thanh toán thành công')
+  expect(keys).toHaveLength(2)
+  expect(keys[0]).toBe(keys[1])
+  await page.getByRole('button', { name: 'Hoàn tất', exact: true }).click()
+  const balance = await request.get(`${base}/api/v1/customers/${customer.id}/debt`, { headers })
+  expect((await balance.json()).data.outstanding_vnd).toBe(60000)
+  const settled = await request.get(`${base}/api/v1/pos/orders/${orders[0].id}`, { headers })
+  expect((await settled.json()).data.paid_vnd).toBe(35000)
+  if (info.project.name === 'desktop') {
+    await page.getByRole('button', { name: 'Xem hóa đơn tạm tính', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: 'Hóa đơn tạm tính' })
+    const draft = dialog.locator('.draft-order-row').filter({ hasText: orders[2].code })
+    await draft.click()
+    expect(await draft.evaluate((element) => element.nextElementSibling?.classList.contains('invoice-detail-panel'))).toBe(true)
+    await expect(dialog.locator('.invoice-detail-items')).toContainText(`Debt drink ${suffix} × 1`)
+    const unpaid = dialog.locator('.draft-order-row').filter({ hasText: orders[1].code })
+    await unpaid.click()
+    await expect(draft).toHaveAttribute('aria-expanded', 'false')
+    expect(await unpaid.evaluate((element) => element.nextElementSibling?.classList.contains('invoice-detail-panel'))).toBe(true)
+    await page.screenshot({ path: info.outputPath('inline-draft-invoice.png') })
+    await dialog.getByRole('button', { name: 'Mở đơn', exact: true }).click()
+    await expect(page.locator('.order-type')).toContainText(orders[1].code)
+    await expect(previousDebt).toContainText('0 ₫')
+  }
+})

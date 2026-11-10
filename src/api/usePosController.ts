@@ -21,6 +21,8 @@ export function orderCart(order: OrderDTO) {
 }
 export function usePosController() {
   const session = useSessionStore((state) => state.session)
+  const customerID = usePosStore((state) => state.customerID)
+  const serverOrderID = usePosStore((state) => state.serverOrderID)
   const remote = !apiConfig.useMock
   const key = scope()
   const client = useQueryClient()
@@ -39,10 +41,12 @@ export function usePosController() {
     const [open, history] = await Promise.all([allPages((page) => ordersRepository.list('open', page, signal)), ordersRepository.list('history', 1, signal)])
     return { open, history: history.items }
   }, refetchInterval: 15_000 })
+  const debtEnabled = remote && !!session && !!customerID
+  const debt = useQuery({ queryKey: ['api', key, 'customer-debt', customerID, serverOrderID], enabled: debtEnabled, queryFn: ({ signal }) => customersRepository.debt(customerID!, serverOrderID, signal), refetchInterval: 15_000 })
   const invalidate = () => client.invalidateQueries({ queryKey: ['api', key] })
   const apply = (order: OrderDTO) => {
     if (scope() !== key) throw new Error('Phiên đã thay đổi. Vui lòng đăng nhập lại.')
-    usePosStore.setState({ items: orderCart(order), serverOrderID: order.id, serverVersion: order.version, orderCode: order.code, table: order.room, customer: order.customer, customerID: order.customer_id, note: order.note, discount: order.discount_vnd, paidBefore: order.paid_vnd, activeDraftId: null, saveKey: '', saveSignature: '' })
+    usePosStore.setState({ paidAmount: '', items: orderCart(order), serverOrderID: order.id, serverVersion: order.version, orderCode: order.code, table: order.room, customer: order.customer, customerID: order.customer_id, note: order.note, discount: order.discount_vnd, paidBefore: order.paid_vnd, activeDraftId: null, saveKey: '', saveSignature: '' })
   }
   const save = async () => {
     const state = usePosStore.getState()
@@ -87,7 +91,7 @@ export function usePosController() {
     if (!state.tabs.length || state.items.length || state.serverOrderID) state.newTab()
     apply(order)
   })
-  const drafts: PosDraft[] = (orders.data?.open ?? []).map((order) => ({ id: order.id, orderCode: order.code, table: order.room, customer: order.customer, items: orderCart(order), discount: order.discount_vnd, note: order.note, updatedAt: order.updated_at }))
-  return { remote, busy, save: () => exclusive(save), pay, open, invalidate, products: catalog.data?.products ?? [], customers: catalog.data?.customers ?? [], rooms: rooms.data ?? [], drafts, history: orders.data?.history ?? [],
-    loading: remote && (catalog.isPending || rooms.isPending || orders.isPending), error: catalog.error ?? rooms.error ?? orders.error }
+  const drafts: PosDraft[] = (orders.data?.open ?? []).map((order) => ({ paid: order.paid_vnd, id: order.id, orderCode: order.code, table: order.room, customer: order.customer, items: orderCart(order), discount: order.discount_vnd, note: order.note, updatedAt: order.updated_at }))
+  return { remote, busy, customerDebt: debtEnabled ? debt.data?.outstanding_vnd ?? 0 : 0, debtPending: debtEnabled && debt.isFetching, save: () => exclusive(save), pay, open, invalidate, products: catalog.data?.products ?? [], customers: catalog.data?.customers ?? [], rooms: rooms.data ?? [], drafts, history: orders.data?.history ?? [],
+    loading: remote && (catalog.isPending || rooms.isPending || orders.isPending || (debtEnabled && debt.isPending)), error: catalog.error ?? rooms.error ?? orders.error ?? (debtEnabled ? debt.error : null) }
 }

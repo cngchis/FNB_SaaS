@@ -18,6 +18,7 @@ func RegisterRoutes(api *gin.RouterGroup, pool *pgxpool.Pool) {
 	customers := api.Group("/customers", auth.RequireRoles("owner", "manager", "cashier"))
 	customers.GET("", h.list)
 	customers.GET("/:id", h.get)
+	customers.GET("/:id/debt", h.debt)
 	customers.POST("", h.save)
 	customers.PUT("/:id", h.save)
 	customers.DELETE("/:id", auth.RequireRoles("owner", "manager"), h.delete)

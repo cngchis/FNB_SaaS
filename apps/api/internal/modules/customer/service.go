@@ -81,6 +81,18 @@ func (s Service) Save(ctx context.Context, tenant string, id pgtype.UUID, in Inp
 }
 func (s Service) Delete(ctx context.Context, tenant string, id pgtype.UUID) error {
 	return database.WithTenantQueries(ctx, s.Pool, tenant, func(q *dbgen.Queries, tid pgtype.UUID) error {
+		// Order creation takes a shared customer lock; serialize deletion with it.
+		if _, err := q.LockCustomerForDeletion(ctx, dbgen.LockCustomerForDeletionParams{TenantID: tid, ID: id}); err != nil {
+			return err
+		}
+		used, err := q.CustomerHasOpenOrders(ctx, dbgen.CustomerHasOpenOrdersParams{TenantID: tid, CustomerID: id})
+		if err != nil {
+			return err
+		}
+		if used {
+			return &httpx.PublicError{Status: 409, Code: "customer_in_use", Message: "Settle open customer orders before deleting the customer."}
+		}
+
 		count, err := q.DeleteCustomer(ctx, dbgen.DeleteCustomerParams{TenantID: tid, ID: id})
 		if err != nil {
 			return err

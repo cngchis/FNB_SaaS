@@ -228,6 +228,10 @@ func saveOrder(ctx context.Context, tx pgx.Tx, who auth.Identity, id *string, in
 		if err != nil {
 			return result, err
 		}
+		// Issued receivables cannot silently move to another customer.
+		if prior.Invoice != nil && ((prior.CustomerID == nil) != (in.CustomerID == nil) || (prior.CustomerID != nil && in.CustomerID != nil && *prior.CustomerID != *in.CustomerID)) {
+			return result, conflict("An issued invoice cannot be reassigned to a different customer.")
+		}
 		paid = prior.Paid
 		for _, line := range prior.Items {
 			old[line.Key] = line

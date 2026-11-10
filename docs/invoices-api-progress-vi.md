@@ -1,5 +1,7 @@
 # Tiến độ nối Hóa đơn Management với API
 
+> **Cập nhật công nợ:** đã nối dòng nợ trước đó và luồng thu thêm tiền trong POS. Xem [tiến độ công nợ](./customer-debt-progress-vi.md).
+
 Cập nhật: 10/11/2026.
 
 ## Đã làm

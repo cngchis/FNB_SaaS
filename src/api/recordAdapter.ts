@@ -65,6 +65,7 @@ export function errorMessage(error: unknown): string {
     if (error.status === 401) return 'Phiên đăng nhập không hợp lệ hoặc thông tin đăng nhập chưa đúng.'
     if (error.status === 403) return 'Tài khoản không có quyền thực hiện thao tác này.'
     if (error.status === 404) return 'Bản ghi không còn tồn tại hoặc không thuộc cửa hàng hiện tại.'
+    if (error.status === 409 && error.code === 'customer_in_use') return 'Khách hàng đang có đơn chưa tất toán. Vui lòng xử lý đơn trước khi xóa.'
     if (error.status === 409 && error.code === 'state_conflict') return 'Đơn hàng hoặc bàn đã thay đổi. Đóng tab rồi mở lại đơn đã lưu để cập nhật.'
     if (error.status === 409) return 'Tên hoặc mã đã tồn tại. Vui lòng kiểm tra lại.'
     if (error.status === 422) return 'Dữ liệu chưa hợp lệ. Kiểm tra tên, giá, nhóm và đơn vị quy đổi.'

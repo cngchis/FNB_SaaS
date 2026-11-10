@@ -106,6 +106,22 @@ func (q *Queries) CreateCustomerGroup(ctx context.Context, arg CreateCustomerGro
 	return i, err
 }
 
+const customerHasOpenOrders = `-- name: CustomerHasOpenOrders :one
+SELECT EXISTS(SELECT 1 FROM orders WHERE tenant_id=$1 AND customer_id=$2 AND deleted_at IS NULL AND status IN ('open','estimated','pending_payment'))::boolean
+`
+
+type CustomerHasOpenOrdersParams struct {
+	TenantID   pgtype.UUID `json:"tenant_id"`
+	CustomerID pgtype.UUID `json:"customer_id"`
+}
+
+func (q *Queries) CustomerHasOpenOrders(ctx context.Context, arg CustomerHasOpenOrdersParams) (bool, error) {
+	row := q.db.QueryRow(ctx, customerHasOpenOrders, arg.TenantID, arg.CustomerID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const deleteCustomer = `-- name: DeleteCustomer :execrows
 UPDATE customers SET deleted_at = now(), updated_at = now() WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL
 `
@@ -179,6 +195,41 @@ func (q *Queries) GetCustomer(ctx context.Context, arg GetCustomerParams) (Custo
 		&i.GroupID,
 		&i.Points,
 	)
+	return i, err
+}
+
+const getCustomerDebt = `-- name: GetCustomerDebt :one
+SELECT c.id AS customer_id,
+ (SELECT coalesce(sum(greatest(o.total_vnd-coalesce((SELECT sum(p.amount_vnd) FROM payments p WHERE p.tenant_id=o.tenant_id AND p.store_id=o.store_id AND p.order_id=o.id AND p.status='succeeded'),0),0)),0)::numeric
+  FROM orders o JOIN invoices i ON i.tenant_id=o.tenant_id AND i.store_id=o.store_id AND i.order_id=o.id
+  WHERE o.tenant_id=c.tenant_id AND o.store_id=$1 AND o.customer_id=c.id AND o.deleted_at IS NULL AND o.status NOT IN ('cancelled','refunded','paid')
+  AND ($2::uuid IS NULL OR o.id<>$2)) AS outstanding_vnd
+FROM customers c WHERE c.tenant_id=$3 AND c.id=$4 AND c.deleted_at IS NULL
+AND ($2::uuid IS NULL OR EXISTS(SELECT 1 FROM orders x WHERE x.tenant_id=c.tenant_id AND x.store_id=$1 AND x.id=$2 AND x.deleted_at IS NULL))
+`
+
+type GetCustomerDebtParams struct {
+	StoreID        pgtype.UUID `json:"store_id"`
+	ExcludeOrderID pgtype.UUID `json:"exclude_order_id"`
+	TenantID       pgtype.UUID `json:"tenant_id"`
+	ID             pgtype.UUID `json:"id"`
+}
+
+type GetCustomerDebtRow struct {
+	CustomerID     pgtype.UUID `json:"customer_id"`
+	OutstandingVnd string      `json:"outstanding_vnd"`
+}
+
+// Only issued, outstanding invoices are receivables; drafts are not debt.
+func (q *Queries) GetCustomerDebt(ctx context.Context, arg GetCustomerDebtParams) (GetCustomerDebtRow, error) {
+	row := q.db.QueryRow(ctx, getCustomerDebt,
+		arg.StoreID,
+		arg.ExcludeOrderID,
+		arg.TenantID,
+		arg.ID,
+	)
+	var i GetCustomerDebtRow
+	err := row.Scan(&i.CustomerID, &i.OutstandingVnd)
 	return i, err
 }
 
@@ -398,6 +449,22 @@ func (q *Queries) ListCustomers(ctx context.Context, arg ListCustomersParams) ([
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockCustomerForDeletion = `-- name: LockCustomerForDeletion :one
+SELECT id FROM customers WHERE tenant_id=$1 AND id=$2 AND deleted_at IS NULL FOR UPDATE
+`
+
+type LockCustomerForDeletionParams struct {
+	TenantID pgtype.UUID `json:"tenant_id"`
+	ID       pgtype.UUID `json:"id"`
+}
+
+func (q *Queries) LockCustomerForDeletion(ctx context.Context, arg LockCustomerForDeletionParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, lockCustomerForDeletion, arg.TenantID, arg.ID)
+	var id pgtype.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const updateCustomer = `-- name: UpdateCustomer :one

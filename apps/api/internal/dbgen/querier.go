@@ -22,6 +22,7 @@ type Querier interface {
 	CreateProductCategory(ctx context.Context, arg CreateProductCategoryParams) (ProductCategory, error)
 	CreateProductUnit(ctx context.Context, arg CreateProductUnitParams) error
 	CreateRoom(ctx context.Context, arg CreateRoomParams) (Room, error)
+	CustomerHasOpenOrders(ctx context.Context, arg CustomerHasOpenOrdersParams) (bool, error)
 	DeleteCustomer(ctx context.Context, arg DeleteCustomerParams) (int64, error)
 	DeleteCustomerGroup(ctx context.Context, arg DeleteCustomerGroupParams) (int64, error)
 	DeleteProduct(ctx context.Context, arg DeleteProductParams) (int64, error)
@@ -30,6 +31,8 @@ type Querier interface {
 	DetachCustomerGroup(ctx context.Context, arg DetachCustomerGroupParams) error
 	DetachProductCategory(ctx context.Context, arg DetachProductCategoryParams) error
 	GetCustomer(ctx context.Context, arg GetCustomerParams) (Customer, error)
+	// Only issued, outstanding invoices are receivables; drafts are not debt.
+	GetCustomerDebt(ctx context.Context, arg GetCustomerDebtParams) (GetCustomerDebtRow, error)
 	GetCustomerDetails(ctx context.Context, arg GetCustomerDetailsParams) (GetCustomerDetailsRow, error)
 	GetCustomerGroup(ctx context.Context, arg GetCustomerGroupParams) (CustomerGroup, error)
 	GetLoginIdentity(ctx context.Context, arg GetLoginIdentityParams) (GetLoginIdentityRow, error)
@@ -45,6 +48,7 @@ type Querier interface {
 	ListProductUnits(ctx context.Context, arg ListProductUnitsParams) ([]ProductUnit, error)
 	ListProducts(ctx context.Context, arg ListProductsParams) ([]ListProductsRow, error)
 	ListRooms(ctx context.Context, arg ListRoomsParams) ([]ListRoomsRow, error)
+	LockCustomerForDeletion(ctx context.Context, arg LockCustomerForDeletionParams) (pgtype.UUID, error)
 	LockProduct(ctx context.Context, arg LockProductParams) (Product, error)
 	NextProductNumber(ctx context.Context, tenantID pgtype.UUID) (int64, error)
 	// A single statement gives rows, payment totals and metrics the same snapshot.

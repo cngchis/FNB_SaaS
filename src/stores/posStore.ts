@@ -5,6 +5,7 @@ import type { CartLine, Product } from '../types'
 const draftStorageKey = 'fnb-pos:drafts'
 
 export type PosDraft = {
+  paid?: number
   id: string
   orderCode: string
   table: string
