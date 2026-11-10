@@ -82,7 +82,7 @@ export const usePosStore = create<PosState>((set, get) => ({
   setPaidAmount: (paidAmount) => set({ paidAmount }),
   newTab: () => { const state = get(); const id = crypto.randomUUID(); const serial = state.serial + 1; set({ ...emptyCart(), serial, activeTabID: id, tabs: [...state.tabs.map((tab) => tab.id === state.activeTabID ? { ...tab, snapshot: snapshot(state) } : tab), { id, label: 'Đơn hàng ' + serial, snapshot: null }] }) },
   activateTab: (id) => { const state = get(); const target = state.tabs.find((tab) => tab.id === id); if (!target || id === state.activeTabID) return; set({ ...(target.snapshot ?? emptyCart()), activeTabID: id, tabs: state.tabs.map((tab) => tab.id === state.activeTabID ? { ...tab, snapshot: snapshot(state) } : tab) }) },
-  closeTab: (id) => { const state = get(); const remaining = state.tabs.filter((tab) => tab.id !== id); if (state.activeTabID !== id) { set({ tabs: remaining }); return }; if (!remaining.length) { const next = state.serial + 1; const tabID = crypto.randomUUID(); set({ ...emptyCart(), serial: next, activeTabID: tabID, tabs: [{ id: tabID, label: 'Đơn hàng ' + next, snapshot: null }] }); return }; const target = remaining[remaining.length - 1]; set({ ...(target.snapshot ?? emptyCart()), tabs: remaining, activeTabID: target.id }) },
+  closeTab: (id) => { const state = get(); const remaining = state.tabs.filter((tab) => tab.id !== id); if (state.activeTabID !== id) { set({ tabs: remaining }); return }; if (!remaining.length) { set({ ...emptyCart(), serial: 0, activeTabID: '', tabs: [] }); return }; const target = remaining[remaining.length - 1]; set({ ...(target.snapshot ?? emptyCart()), tabs: remaining, activeTabID: target.id }) },
   resetSession: () => set({ ...emptyCart(), drafts: [], tabs: [{ id: 'initial', label: 'Đơn hàng 1', snapshot: null }], activeTabID: 'initial', serial: 1 }),
   items: [],
   discount: 0,
@@ -92,12 +92,12 @@ export const usePosStore = create<PosState>((set, get) => ({
   orderCode: apiConfig.useMock ? '168-15' : 'Tự động',
   drafts: apiConfig.useMock ? readDrafts() : [],
   activeDraftId: null,
-  add: (product) => set((state) => {
+  add: (product) => { if (!get().tabs.length) get().newTab(); set((state) => {
     const exists = state.items.find((line) => line.product.id === product.id)
     return { items: exists
       ? state.items.map((line) => line.product.id === product.id ? { ...line, quantity: line.quantity + 1 } : line)
       : [...state.items, { product, quantity: 1 }] }
-  }),
+  }) },
   setQuantity: (productId, quantity) => set((state) => ({ items: quantity < 1
     ? state.items.filter((line) => line.product.id !== productId)
     : state.items.map((line) => line.product.id === productId ? { ...line, quantity } : line) })),
@@ -105,7 +105,7 @@ export const usePosStore = create<PosState>((set, get) => ({
   setDiscount: (discount) => set({ discount: Math.max(0, discount) }),
   setNote: (note) => set({ note }),
   setCustomer: (customer) => set({ customer }),
-  setTable: (table) => set({ table }),
+  setTable: (table) => { if (!get().tabs.length) get().newTab(); set({ table }) },
   nextOrder: () => set((state) => ({ orderCode: incrementOrderCode(state.orderCode) })),
   saveDraft: () => {
     const state = get()

@@ -83,3 +83,8 @@ VITE_USE_MOCK=false npm run dev
 - [Backend integration](../apps/api/tests/pos_integration_test.go), [browser integration](../tests/browser/api.spec.ts).
 
 Không tự commit/push. Gợi ý: `feat(pos): add persistent table orders, cash checkout and order tabs`.
+
+## Sửa lỗi sau triển khai
+
+- Log `relation "rooms" does not exist` / `relation "invoices" does not exist` nghĩa là database kết nối bởi API chưa được áp migration 3 (hoặc migrate nhầm database). Dùng kết nối quản trị trỏ đúng database của API, chạy `make migrate-up-local`, sau đó restart API. Không tạo bảng bằng tay, không bootstrap lại và không fallback sang mock để che lỗi.
+- Đóng tab cuối hiện xóa hẳn tab và giỏ, không tự tạo tab tăng số. Chỉ khi bấm thêm đơn, thêm món, chọn bàn hoặc mở đơn đã lưu mới tạo lại tab. Khi đã đóng hết tab, số thứ tự bắt đầu lại từ Đơn hàng 1. Đơn đã lưu trên server không bị xóa khi đóng tab.

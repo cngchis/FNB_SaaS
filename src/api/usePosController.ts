@@ -84,7 +84,7 @@ export function usePosController() {
     if (existing) { state.activateTab(existing.id); return }
     const order = await ordersRepository.get(id)
     if (scope() !== key) throw new Error('Phiên đã thay đổi.')
-    if (state.items.length || state.serverOrderID) state.newTab()
+    if (!state.tabs.length || state.items.length || state.serverOrderID) state.newTab()
     apply(order)
   })
   const drafts: PosDraft[] = (orders.data?.open ?? []).map((order) => ({ id: order.id, orderCode: order.code, table: order.room, customer: order.customer, items: orderCart(order), discount: order.discount_vnd, note: order.note, updatedAt: order.updated_at }))
