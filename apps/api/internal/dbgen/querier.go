@@ -51,6 +51,8 @@ type Querier interface {
 	LockCustomerForDeletion(ctx context.Context, arg LockCustomerForDeletionParams) (pgtype.UUID, error)
 	LockProduct(ctx context.Context, arg LockProductParams) (Product, error)
 	NextProductNumber(ctx context.Context, tenantID pgtype.UUID) (int64, error)
+	// One row per successful payment: the projection cannot duplicate a collection.
+	ReadCashbook(ctx context.Context, arg ReadCashbookParams) ([]byte, error)
 	// A single statement gives rows, payment totals and metrics the same snapshot.
 	ReadInvoices(ctx context.Context, arg ReadInvoicesParams) ([]byte, error)
 	UpdateCustomer(ctx context.Context, arg UpdateCustomerParams) (Customer, error)

@@ -35,16 +35,16 @@ A Go modular-monolith API foundation and PostgreSQL 16 target configuration were
 
 ## API routes
 
-| Route | Purpose | Authentication |
-|---|---|---|
-| `GET /healthz` | Process health | No |
-| `GET /readyz` | Database readiness | No |
-| `GET /metrics` | Prometheus request counters | No |
-| `POST /api/v1/auth/login` | Sign in for a tenant and accessible store | No |
-| `POST /api/v1/auth/refresh` | Rotate refresh token and issue access token | No |
-| `POST /api/v1/auth/logout` | Revoke current session | Bearer token |
-| `GET /api/v1/me` | Return authenticated identity and tenant/store context | Bearer token |
-| `GET /api/v1/admin/access-check` | Example owner/manager authorization gate | Bearer token + role |
+| Route                            | Purpose                                                | Authentication      |
+| -------------------------------- | ------------------------------------------------------ | ------------------- |
+| `GET /healthz`                   | Process health                                         | No                  |
+| `GET /readyz`                    | Database readiness                                     | No                  |
+| `GET /metrics`                   | Prometheus request counters                            | No                  |
+| `POST /api/v1/auth/login`        | Sign in for a tenant and accessible store              | No                  |
+| `POST /api/v1/auth/refresh`      | Rotate refresh token and issue access token            | No                  |
+| `POST /api/v1/auth/logout`       | Revoke current session                                 | Bearer token        |
+| `GET /api/v1/me`                 | Return authenticated identity and tenant/store context | Bearer token        |
+| `GET /api/v1/admin/access-check` | Example owner/manager authorization gate               | Bearer token + role |
 
 Responses use `{ "data": ... }`; errors use `{ "error": { "code": "...", "message": "..." } }`.
 
@@ -56,21 +56,21 @@ Use distinct owner/runtime database passwords and URL-encode reserved characters
 
 ## Verification status
 
-| Check | Result |
-|---|---|
-| Whitespace scan | Completed; no trailing whitespace found in added files |
-| Go formatting | Passed: `gofmt` run on Go sources |
-| Go tests | Passed: unit tests and real catalog/customer HTTP integration, RLS and migration round-trip on an isolated native PostgreSQL 18.3 cluster; external auth lifecycle skipped without credentials |
-| Go build | Passed: `go build ./...` |
-| PostgreSQL migration / RLS integration test | User confirmed migration, bootstrap, readiness, login, and a PASS result for the RLS test on local database `fnb_saas`; credentials are not available to the agent |
-| Full authentication lifecycle | User confirmed PASS for the login/refresh/logout lifecycle integration test |
-| Migration rollback/reapply | User confirmed PASS for TestMigrationRoundTrip: up, down to version zero, and up again in a temporary database |
-| SQLC generation | Passed: SQLC v1.29.0 generated auth lookups, catalog and customer queries |
-| Go vet | Passed: `go vet ./...` |
-| Race detector | Passed: `go test -race ./... -count=1` with native PostgreSQL 18.3 integration fixtures |
-| PostgreSQL 16 / GitHub CI | Configured, not executed; local database checks used PostgreSQL 18.3 |
-| Compose validation/startup | Not run: Docker was not used; native local PostgreSQL is the requested workflow |
-| Frontend visual checks | Not applicable to this backend-only change; no frontend/CSS files were edited |
+| Check                                       | Result                                                                                                                                                                                        |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Whitespace scan                             | Completed; no trailing whitespace found in added files                                                                                                                                        |
+| Go formatting                               | Passed: `gofmt` run on Go sources                                                                                                                                                             |
+| Go tests                                    | Passed: unit tests and real catalog/customer HTTP integration, RLS and migration round-trip on an isolated native PostgreSQL 18.3 cluster; external authlifecycle skipped without credentials |
+| Go build                                    | Passed: `go build ./...`                                                                                                                                                                      |
+| PostgreSQL migration / RLS integration test | User confirmed migration, bootstrap, readiness, login, and a PASS result for the RLS test on local database `fnb_saas`; credentials are not available to the agent                            |
+| Full authentication lifecycle               | User confirmed PASS for the login/refresh/logout lifecycle integration test                                                                                                                   |
+| Migration rollback/reapply                  | User confirmed PASS for TestMigrationRoundTrip: up, down to version zero, and up again in a temporary database                                                                                |
+| SQLC generation                             | Passed: SQLC v1.29.0 generated auth lookups, catalog and customer queries                                                                                                                     |
+| Go vet                                      | Passed: `go vet ./...`                                                                                                                                                                        |
+| Race detector                               | Passed: `go test -race ./... -count=1` with native PostgreSQL 18.3 integration fixtures                                                                                                       |
+| PostgreSQL 16 / GitHub CI                   | Configured, not executed; local database checks used PostgreSQL 18.3                                                                                                                          |
+| Compose validation/startup                  | Not run: Docker was not used; native local PostgreSQL is the requested workflow                                                                                                               |
+| Frontend visual checks                      | Not applicable to this backend-only change; no frontend/CSS files were edited                                                                                                                 |
 
 Foundation checks were previously confirmed by the user. The agent additionally ran migration 1+2 rollback/reapply, RLS and catalog/customer HTTP integration on a temporary PostgreSQL 18.3 cluster using a private Unix socket. The existing database was not modified. Frontend integration, PostgreSQL 16 verification and a live CI run remain pending.
 

@@ -30,6 +30,51 @@ type AuthSession struct {
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 }
 
+type CashbookEntry struct {
+	ID          pgtype.UUID        `json:"id"`
+	TenantID    pgtype.UUID        `json:"tenant_id"`
+	StoreID     pgtype.UUID        `json:"store_id"`
+	Code        string             `json:"code"`
+	Source      string             `json:"source"`
+	Status      string             `json:"status"`
+	Direction   string             `json:"direction"`
+	AmountVnd   int64              `json:"amount_vnd"`
+	Method      string             `json:"method"`
+	Category    string             `json:"category"`
+	PayerGroup  string             `json:"payer_group"`
+	Payer       string             `json:"payer"`
+	Note        string             `json:"note"`
+	OccurredAt  pgtype.Timestamptz `json:"occurred_at"`
+	Creator     string             `json:"creator"`
+	Branch      string             `json:"branch"`
+	InvoiceCode pgtype.Text        `json:"invoice_code"`
+	OrderID     pgtype.UUID        `json:"order_id"`
+	Version     int64              `json:"version"`
+}
+
+type CashbookVoucher struct {
+	ID             pgtype.UUID        `json:"id"`
+	TenantID       pgtype.UUID        `json:"tenant_id"`
+	StoreID        pgtype.UUID        `json:"store_id"`
+	Code           string             `json:"code"`
+	Direction      string             `json:"direction"`
+	AmountVnd      int64              `json:"amount_vnd"`
+	Status         string             `json:"status"`
+	Method         string             `json:"method"`
+	Category       string             `json:"category"`
+	PayerGroup     string             `json:"payer_group"`
+	Payer          string             `json:"payer"`
+	Note           string             `json:"note"`
+	OccurredAt     pgtype.Timestamptz `json:"occurred_at"`
+	CreatedBy      pgtype.UUID        `json:"created_by"`
+	Version        int64              `json:"version"`
+	IdempotencyKey string             `json:"idempotency_key"`
+	RequestHash    string             `json:"request_hash"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
+}
+
 type Customer struct {
 	ID        pgtype.UUID        `json:"id"`
 	TenantID  pgtype.UUID        `json:"tenant_id"`
@@ -168,6 +213,8 @@ type Payment struct {
 	IdempotencyKey    string             `json:"idempotency_key"`
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	ReceiptCode       string             `json:"receipt_code"`
+	CreatedBy         pgtype.UUID        `json:"created_by"`
 }
 
 type PaymentMethod struct {

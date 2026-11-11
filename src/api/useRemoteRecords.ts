@@ -1,3 +1,4 @@
+import { useCashbookRecords } from './useCashbookRecords'
 import { useInvoiceRecords } from './useInvoiceRecords'
 import { roomsRepository } from './pos'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -8,7 +9,7 @@ import { menuItemsRepository, customersRepository, categoriesRepository, groupsR
 import { connectedModules, customerInput, customerRow, errorMessage, groupInput, groupRow, productInput, productRow } from './recordAdapter'
 import type { ManagementRow } from '../features/management/moduleConfig'
 
-export function useRemoteRecords(moduleId: string, page: number, query: string, filter: string, sort: string | null, ascending: boolean, dates: { from?: string; to?: string } = {}) {
+export function useRemoteRecords(moduleId: string, page: number, query: string, filter: string, sort: string | null, ascending: boolean, dates: { from?: string; to?: string; cashTab?: string; branch?: string } = {}) {
   const session = useSessionStore((state) => state.session)
   const remote = !apiConfig.useMock && connectedModules.has(moduleId)
   const enabled = remote && session !== null
@@ -45,7 +46,8 @@ export function useRemoteRecords(moduleId: string, page: number, query: string, 
   }
   const roomData = useQuery({ queryKey: ['api', scope, 'rooms'], enabled: enabled && moduleId === 'rooms', queryFn: ({ signal }) => roomsRepository.list(signal) })
   const invoiceData = useInvoiceRecords(enabled && moduleId === 'invoices', scope, mobile, page, search, filter, sort, ascending, dates)
-  const listEnabled = enabled && moduleId !== 'invoices' && moduleId !== 'rooms' && moduleId !== 'customer-groups' && (moduleId !== 'customers' || groups.isSuccess)
+  const cashData = useCashbookRecords(enabled && moduleId === 'cashbook', scope, mobile, page, search, filter, sort, ascending, dates)
+  const listEnabled = enabled && moduleId !== 'cashbook' && moduleId !== 'invoices' && moduleId !== 'rooms' && moduleId !== 'customer-groups' && (moduleId !== 'customers' || groups.isSuccess)
   const records = useQuery({
     queryKey: ['api', scope, moduleId, options], enabled: listEnabled && !mobile,
     queryFn: ({ signal }) => fetchPage(page, signal),
@@ -114,10 +116,15 @@ export function useRemoteRecords(moduleId: string, page: number, query: string, 
     fetchingMore: infinite.isFetchingNextPage,
     categories: categories.data ?? [], groups: groups.data ?? [], canManage,
     pending: save.isPending || remove.isPending || createCategory.isPending,
-    save: save.mutateAsync, remove: remove.mutateAsync, createCategory: createCategory.mutateAsync,
+    save: save.mutateAsync, remove: (id: string, _version?: number) => remove.mutateAsync(id), createCategory: createCategory.mutateAsync,
     retry: invalidate, exportRows,
     summary: invoice ? invoiceData.summary : undefined,
+    cashSummary: moduleId === 'cashbook' ? cashData.cashSummary : undefined,
+    branches: (session?.stores ?? []).filter((store) => session?.user.role !== 'cashier' || store.id === session.store_id),
+    storeID: session?.store_id ?? '',
+    userName: session?.user.display_name ?? '',
     canSort: (key: string) => moduleId === 'customer-groups' || moduleId === 'rooms' || Boolean((moduleId === 'menu-items' ? productSort : customerSort)[key]),
-    ...(invoice ? { rows: invoiceData.rows, total: invoiceData.total, pages: invoiceData.pages, loading: remote && (search !== query || invoiceData.loading), error: invoiceData.error ? errorMessage(invoiceData.error) : '', hasMore: search === query && invoiceData.hasMore, fetchingMore: invoiceData.fetchingMore, loadMore: invoiceData.loadMore, canSort: invoiceData.canSort, exportRows: invoiceData.exportRows } : {}),
+    ...(invoice ? { rows: search === query ? invoiceData.rows : [], total: invoiceData.total, pages: invoiceData.pages, loading: remote && (search !== query || invoiceData.loading), error: invoiceData.error ? errorMessage(invoiceData.error) : '', hasMore: search === query && invoiceData.hasMore, fetchingMore: invoiceData.fetchingMore, loadMore: invoiceData.loadMore, canSort: invoiceData.canSort, exportRows: invoiceData.exportRows } : {}),
+    ...(moduleId === 'cashbook' ? { ...cashData, rows: search === query ? cashData.rows : [], loading: remote && (search !== query || cashData.loading), error: cashData.error ? errorMessage(cashData.error) : '', hasMore: search === query && cashData.hasMore } : {}),
   }
 }

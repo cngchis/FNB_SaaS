@@ -1,5 +1,7 @@
 # Báo cáo tiến độ và bàn giao cho agent tiếp theo
 
+> **Cập nhật Sổ quỹ:** đã nối khoản thu POS và phiếu thu/chi nhập tay với database. Cần migration 4; xem [tiến độ Sổ quỹ](./cashbook-progress-vi.md).
+
 > **Cập nhật công nợ:** đã nối dòng nợ trước đó và luồng thu thêm tiền trong POS. Xem [tiến độ công nợ](./customer-debt-progress-vi.md).
 
 > **Cập nhật Hóa đơn:** `/management/invoices` đã nối dữ liệu POS thật. Xem [tiến độ Hóa đơn](./invoices-api-progress-vi.md); các mục bên dưới ghi lại giai đoạn trước.

@@ -357,7 +357,11 @@ func payCash(ctx context.Context, tx pgx.Tx, who auth.Identity, id, key string, 
 			}
 			return result, err
 		}
-		_, err = tx.Exec(ctx, `INSERT INTO payments(tenant_id,store_id,order_id,payment_method_id,amount_vnd,status,idempotency_key) VALUES($1,$2,$3,$4,$5,'succeeded',$6)`, who.TenantID, who.StoreID, id, method, amount, key)
+		receiptCode, codeErr := counter(ctx, tx, who.TenantID, "cashbook", "TTHD")
+		if codeErr != nil {
+			return result, codeErr
+		}
+		_, err = tx.Exec(ctx, `INSERT INTO payments(tenant_id,store_id,order_id,payment_method_id,amount_vnd,status,idempotency_key,receipt_code,created_by) VALUES($1,$2,$3,$4,$5,'succeeded',$6,$7,$8)`, who.TenantID, who.StoreID, id, method, amount, key, receiptCode, who.UserID)
 		if err != nil {
 			return result, err
 		}

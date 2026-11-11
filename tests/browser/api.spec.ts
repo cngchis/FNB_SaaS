@@ -442,3 +442,115 @@ test('customer debt: inline invoice details, resume and idempotent collection', 
     await expect(previousDebt).toContainText('0 ₫')
   }
 })
+
+test('real cashbook: payment reconciliation, vouchers, balances, tabs and export', async ({ page, request }, info) => {
+  test.skip(!tenant || !email || !password, 'Use the isolated native PostgreSQL fixture.')
+  const auth = await request.post(`${base}/api/v1/auth/login`, { data: { tenant_slug: tenant, email, password } })
+  const { data: session } = await auth.json()
+  const headers = { Authorization: `Bearer ${session.access_token}` }
+  const suffix = `${info.project.name}-${Date.now()}`
+  const label = `Cashbook ${suffix}`
+  const month = info.project.name === 'desktop' ? '01' : '02'
+  const date = `2046-${month}-10`
+  const localDate = `10/${month}/2046 09:00`
+  const before = (await (await request.get(`${base}/api/v1/cashbook`, { headers })).json()).data.summary.income_vnd
+  const productResponse = await request.post(`${base}/api/v1/products`, { headers, data: { name: label, product_type: 'prepared', price_vnd: 35000 } })
+  expect(productResponse.status()).toBe(201)
+  const product = (await productResponse.json()).data
+  const orderResponse = await request.post(`${base}/api/v1/pos/orders`, { headers: { ...headers, 'Idempotency-Key': `book-order-${suffix}` }, data: { items: [{ product_id: product.id, quantity: 1 }] } })
+  const order = (await orderResponse.json()).data
+  let invoice = ''
+  for (const [key, received] of [['partial', 5000], ['partial', 5000], ['final', 50000]] as const) {
+    const result = await request.post(`${base}/api/v1/pos/orders/${order.id}/payments`, { headers: { ...headers, 'Idempotency-Key': `book-pay-${key}-${suffix}` }, data: { received_vnd: received } })
+    expect(result.status()).toBe(200)
+    invoice = (await result.json()).data.order.invoice_code
+  }
+  const after = (await (await request.get(`${base}/api/v1/cashbook`, { headers })).json()).data.summary.income_vnd
+  expect(after - before).toBe(35000)
+  const baseline = (await (await request.get(`${base}/api/v1/cashbook?date_from=${date}&date_to=${date}&store_id=${session.store_id}`, { headers })).json()).data.summary
+  await page.addInitScript(() => localStorage.setItem('fnb-management:cashbook', JSON.stringify([{ code: 'POISON-CASHBOOK' }])))
+  await signIn(page, '/management/cashbook')
+  const search = page.getByRole('textbox', { name: 'Tìm mã phiếu hoặc nội dung...', exact: true })
+  await search.fill('Thanh toán hóa đơn ' + invoice)
+  await expect(page.locator('.record-table tbody tr')).toHaveCount(2)
+  await expect(page.getByText('POISON-CASHBOOK')).toHaveCount(0)
+  await expect(page.locator('.record-table tbody')).toContainText('30.000')
+  await expect(page.locator('.record-table tbody')).toContainText('5.000')
+  await page.locator('.record-table tbody tr').first().getByRole('button', { name: /^Sửa / }).click()
+  await expect(page).toHaveURL('/management/invoices')
+  await expect(page.getByRole('textbox', { name: 'Tìm mã hóa đơn hoặc khách hàng...', exact: true })).toHaveValue(invoice)
+  await expect(page.locator('.record-expandable-row')).toHaveCount(1)
+  await signIn(page, '/management/cashbook')
+  const create = async (status: string, value: string, recorded: string, note: string) => {
+    await page.getByRole('button', { name: 'Thêm phiếu thu chi', exact: true }).click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog.getByLabel('Mã phiếu', { exact: true })).toHaveValue('Tự động')
+    await dialog.locator('select[name="status"]').selectOption(status)
+    await dialog.getByLabel('Giá trị (₫)', { exact: true }).fill(value)
+    await dialog.locator('select[name="category"]').selectOption('Thu khác')
+    await dialog.locator('select[name="payerGroup"]').selectOption('Khác')
+    await dialog.getByLabel('Ngày ghi sổ', { exact: true }).fill(recorded)
+    await dialog.getByLabel('Ghi chú', { exact: true }).fill(note)
+    await dialog.getByRole('button', { name: 'Thêm phiếu thu chi', exact: true }).click()
+    await expect(dialog).toHaveCount(0)
+  }
+  await create('Đã thanh toán', '100000', `09/${month}/2046 09:00`, label + ' opening')
+  await search.fill(label + ' opening')
+  let row = page.locator('.record-table tbody tr')
+  await expect(row).toHaveCount(1)
+  await row.getByRole('button', { name: /^Sửa / }).click()
+  await expect(page.getByRole('alert')).toContainText('không thể sửa')
+  await row.getByRole('button', { name: /^Xóa / }).click()
+  await expect(page.getByRole('alert')).toContainText('không thể xóa')
+  await create('Chưa thanh toán', '9000', localDate, label + ' editable')
+  await search.fill(label + ' editable')
+  row = page.locator('.record-table tbody tr')
+  await expect(row).toHaveCount(1)
+  await expect(row).toContainText('Chưa thanh toán')
+  await expect(row).toContainText('9.000')
+  await row.getByRole('button', { name: /^Sửa / }).click()
+  await page.getByRole('dialog').getByLabel('Giá trị (₫)', { exact: true }).fill('11000')
+  await page.getByRole('button', { name: 'Lưu thay đổi', exact: true }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(row).toContainText('11.000')
+  await row.getByRole('button', { name: /^Xóa / }).click()
+  await page.getByRole('button', { name: 'Xóa bản ghi', exact: true }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(row).toHaveCount(0)
+  for (let i = 0; i < 9; i++) {
+    const result = await request.post(`${base}/api/v1/cashbook`, { headers: { ...headers, 'Idempotency-Key': `book-manual-${suffix}-${i}` }, data: { store_id: session.store_id, direction: i === 0 ? 'out' : 'in', amount_vnd: i === 0 ? 20000 : i === 1 ? 70000 : 1000, status: i < 2 ? 'posted' : 'pending', method: i === 1 ? 'bank' : 'cash', category: i === 0 ? 'operating_expense' : 'other_receipt', payer_group: 'other', payer: '', note: `${label} seeded ${i}`, occurred_at: `${date}T09:00:00+07:00`, version: 0 } })
+    expect(result.status()).toBe(201)
+  }
+  await search.fill(label)
+  await page.locator('.cashbook-date-filters').getByLabel('Từ', { exact: true }).fill(date)
+  await page.locator('.cashbook-date-filters').getByLabel('Đến', { exact: true }).fill(date)
+  await page.getByLabel('Chi nhánh sổ quỹ', { exact: true }).selectOption(session.store_id)
+  const metric = (index: number) => page.locator('.record-metric').nth(index).locator('strong')
+  await expect(metric(1)).toContainText('70.000')
+  await expect(metric(2)).toContainText('20.000')
+  const expected = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(baseline.opening_vnd + 150000)
+  await expect(metric(3)).toHaveText(expected)
+  await page.locator('.cashbook-tabs').getByRole('button', { name: 'Ngân hàng', exact: true }).click()
+  await expect(metric(1)).toContainText('70.000')
+  await expect(metric(2)).toContainText('0')
+  await expect(page.getByRole('link', { name: 'Tài khoản ngân hàng', exact: true })).toBeVisible()
+  await page.locator('.cashbook-tabs').getByRole('button', { name: 'Tiền mặt', exact: true }).click()
+  await expect(metric(1)).toContainText('0')
+  await expect(metric(2)).toContainText('20.000')
+  await page.locator('.cashbook-tabs').getByRole('button', { name: 'Tổng quỹ', exact: true }).click()
+  await page.locator('.record-toolbar .record-filters').getByRole('button', { name: 'Chưa thanh toán', exact: true }).click()
+  if (info.project.name === 'desktop') {
+    await expect(page.locator('.record-table tbody tr')).toHaveCount(6)
+    await page.getByRole('button', { name: 'Trang sau', exact: true }).click()
+    await expect(page.locator('.record-table tbody tr')).toHaveCount(1)
+  } else {
+    await page.locator('.record-page .table-footer').scrollIntoViewIfNeeded()
+    await expect(page.locator('.record-table tbody tr')).toHaveCount(7)
+  }
+  await expect(metric(1)).toContainText('70.000')
+  const downloadEvent = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Xuất file', exact: true }).click()
+  const csv = await readFile((await (await downloadEvent).path())!, 'utf8')
+  expect(csv.trim().split('\n')).toHaveLength(8)
+  await page.screenshot({ path: info.outputPath('cashbook-api.png') })
+})

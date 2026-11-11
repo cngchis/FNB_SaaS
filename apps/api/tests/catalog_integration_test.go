@@ -18,6 +18,7 @@ import (
 
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/config"
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/auth"
+	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/cashbook"
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/customer"
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/invoice"
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/pos"
@@ -62,6 +63,7 @@ type catalogRecord struct {
 	} `json:"units"`
 }
 type moduleFixture struct {
+	runtime                             *pgxpool.Pool
 	otherStoreToken                     string
 	base                                string
 	client                              *http.Client
@@ -194,8 +196,10 @@ func moduleTestFixture(t *testing.T) moduleFixture {
 	customer.RegisterRoutes(secured, runtime)
 	room.RegisterRoutes(secured, runtime)
 	pos.RegisterRoutes(secured, runtime)
+	cashbook.RegisterRoutes(secured, runtime)
 	invoice.RegisterRoutes(secured, runtime)
 	server = httptest.NewServer(engine)
+	f.runtime = runtime
 	f.base = server.URL
 	f.client = server.Client()
 	f.client.Timeout = 10 * time.Second

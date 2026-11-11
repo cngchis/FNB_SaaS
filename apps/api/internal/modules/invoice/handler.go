@@ -65,27 +65,9 @@ type Filter struct {
 
 // Local business dates are inclusive; SQL uses an exclusive next-day boundary.
 func dateRange(from, to string) (pgtype.Timestamptz, pgtype.Timestamptz, error) {
-	var start, until pgtype.Timestamptz
-	zone := time.FixedZone("Asia/Ho_Chi_Minh", 7*60*60)
-	if from != "" {
-		value, err := time.ParseInLocation("2006-01-02", from, zone)
-		if err != nil {
-			return start, until, httpx.Invalid("Use YYYY-MM-DD dates.")
-		}
-		start = pgtype.Timestamptz{Time: value, Valid: true}
-	}
-	if to != "" {
-		value, err := time.ParseInLocation("2006-01-02", to, zone)
-		if err != nil {
-			return start, until, httpx.Invalid("Use YYYY-MM-DD dates.")
-		}
-		until = pgtype.Timestamptz{Time: value.AddDate(0, 0, 1), Valid: true}
-	}
-	if start.Valid && until.Valid && !start.Time.Before(until.Time) {
-		return start, until, httpx.Invalid("The start date must not exceed the end date.")
-	}
-	return start, until, nil
+	return httpx.BusinessDateRange(from, to)
 }
+
 func RegisterRoutes(api *gin.RouterGroup, pool *pgxpool.Pool) {
 	routes := api.Group("/invoices", auth.RequireRoles("owner", "manager", "cashier"))
 	read := func(c *gin.Context) {

@@ -73,6 +73,10 @@ Passwords are bcrypt-hashed. Refresh tokens are random opaque values; only their
 
 SQL query sources are in `sql/`; run `make sqlc` after changing them or the schema. Generated typed queries are checked in under `internal/dbgen` and are used for tenant lookup, login identity, and membership-store queries. Session and refresh flows still use pgx directly within tenant-scoped transactions.
 
+## Cashbook rollout
+
+Migration 4 adds payment receipt codes, collector metadata and manual cashbook vouchers. Stop the old API, run `make migrate-up-local` with the admin connection, then restart the updated API. Older binaries cannot insert payments after this migration. Do not bootstrap again. See [cashbook rollout and API](../../docs/cashbook-progress-vi.md) and [ADR-006](../../docs/ADR-006-cashbook.md).
+
 ## Current scope and known limitations
 
 ### Catalog and customer APIs

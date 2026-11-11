@@ -1,5 +1,7 @@
 # Tiến độ công nợ khách hàng và chi tiết hóa đơn POS
 
+> **Cập nhật Sổ quỹ:** đã nối khoản thu POS và phiếu thu/chi nhập tay với database. Cần migration 4; xem [tiến độ Sổ quỹ](./cashbook-progress-vi.md).
+
 Cập nhật: 10/11/2026.
 
 ## Đã triển khai
