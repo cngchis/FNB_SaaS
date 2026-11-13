@@ -892,3 +892,28 @@ test('inventory create action saves a real product searchable in purchases', asy
  await result.click()
  await expect(page.locator('.inventory-table tbody')).toContainText('Lon')
 })
+
+test('inventory detail editor modifies prototype data without overwriting an API product with the same SKU', async ({ page, request }, info) => {
+ test.skip(!tenant || !email || !password, 'Use the isolated PostgreSQL fixture.')
+ const auth = await request.post(`${base}/api/v1/auth/login`, { data: { tenant_slug: tenant, email, password } })
+ const { data: session } = await auth.json()
+ const headers = { Authorization: `Bearer ${session.access_token}` }
+ const created = await request.post(`${base}/api/v1/products`, { headers, data: { name: `Server beer ${info.project.name} ${Date.now()}`, product_type: 'goods', price_vnd: 22000 } })
+ expect(created.status()).toBe(201)
+ const { data: real } = await created.json()
+ const demo = { code: real.sku, name: `Bia demo ${info.project.name}`, category: 'Bia', productType: 'Hàng hóa thường', price: 18000, cost: 12000, stock: 24, baseUnit: 'Lon', attributes: '[]', units: '[]' }
+ await page.addInitScript((product) => localStorage.setItem('fnb-management:menu-items', JSON.stringify([product])), demo)
+ await signIn(page, '/management/inventory')
+ await page.getByRole('button', { name: `Thao tác ${demo.name}`, exact: true }).click()
+ const dialog = page.getByRole('dialog', { name: 'Cập nhật sản phẩm', exact: true })
+ await expect(dialog.getByText('Thông tin được lưu trong dữ liệu demo trên thiết bị.', { exact: true })).toBeVisible()
+ await dialog.getByLabel('Tên hàng', { exact: true }).fill('Bia demo đã sửa')
+ await dialog.getByLabel('Giá bán (₫)', { exact: true }).fill('20000')
+ await dialog.getByRole('button', { name: 'Lưu món', exact: true }).click()
+ await expect(dialog).toHaveCount(0)
+ await expect(page.locator('.inventory-table tbody')).toContainText('Bia demo đã sửa')
+ const fetched = await request.get(`${base}/api/v1/products/${real.id}`, { headers })
+ const { data: unchanged } = await fetched.json()
+ expect(unchanged.name).toBe(real.name)
+ expect(unchanged.price_vnd).toBe(22000)
+})

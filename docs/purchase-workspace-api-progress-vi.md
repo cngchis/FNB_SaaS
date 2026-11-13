@@ -63,3 +63,15 @@ Test bổ sung kiểm tra nút và lưu sản phẩm ở mock, và luồng API t
 Commit gợi ý: `feat(inventory): add product creation action using the existing catalog editor`.
 
 Kiểm chứng cập nhật nút tạo: TypeScript/build PASS; 40 unit test PASS; 6 E2E mock món/cart/tạo hàng PASS; bộ API 23 PASS và 1 test nhập hàng mobile cũ vẫn `fixme` chờ duyệt. Đã kiểm tra ảnh inventory trước/sau: desktop thêm đúng nút trong header, mobile thêm nút trong nhóm thao tác sẵn có. Không sửa CSS hoặc dữ liệu thật.
+
+## Cập nhật: nút ba chấm sửa chi tiết hàng hóa — 14/11
+
+Theo yêu cầu mới, nút ba chấm từng hàng mở popup `Cập nhật sản phẩm` ngay trong Quản lý hàng hóa, dùng lại `ProductEditor` từ màn hình Món. Không đổi icon, CSS, layout hoặc aria-label hiện có. Không mở popup điều chỉnh tồn kho từ nút này nữa; thao tác điều chỉnh tồn riêng vẫn giữ nguyên.
+
+Đây vẫn là bảng prototype: popup ghi rõ dữ liệu demo và chỉ cập nhật localStorage qua [localInventory.ts](../src/api/localInventory.ts). Tuyệt đối không tìm API product bằng SKU demo để sửa, vì SKU có thể trùng sản phẩm thật thuộc tenant đang đăng nhập. Không nối tồn kho API trong thay đổi này.
+
+Sau lưu, hàng và phần chi tiết cập nhật tên/giá/ảnh/nhóm/thuộc tính/đơn vị; danh sách Món demo dùng cùng bản ghi đã sửa. Các metadata không sửa được giữ lại. Nếu đổi sang loại chế biến thì bỏ hàng khỏi bảng hàng hóa và bỏ giá vốn/tồn nhập tay trong record. Với sản phẩm bundled chưa có record, chỉ tạo record demo khi bấm lưu, dùng mã M tiếp theo và chặn ghi đè khi mã vừa được dùng ở tab khác.
+
+Đã chạy TypeScript/build và 44 unit tests PASS; 24 Playwright tests mock/visual PASS (6 E2E + 18 ảnh khớp baseline hiện có, không cập nhật ảnh trong thay đổi nút ba chấm). E2E API riêng kiểm tra sản phẩm thật có cùng SKU không bị thay đổi khi sửa hàng demo. Không chạm database thật, không commit/push.
+
+Commit gợi ý: `fix(inventory): open product details editor from row action`.

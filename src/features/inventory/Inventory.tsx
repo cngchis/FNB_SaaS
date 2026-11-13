@@ -2,6 +2,9 @@ import { ProductDetails } from '../../components/products/ProductDetails'
 import { useNavigate } from 'react-router-dom'
 import { apiConfig } from '../../api/config'
 import { useSessionStore } from '../../api/auth'
+import { inventoryEditorRow, saveInventoryEditorRow } from '../../api/localInventory'
+import { errorMessage } from '../../api/recordAdapter'
+import { ProductEditor } from '../management/ManagementRecordPage'
 import type { ManagementRow } from '../management/moduleConfig'
 import { Fragment, useMemo, useState } from 'react'
 import { ChevronDown, ChevronLeft, ChevronRight, ClipboardCheck, Download, MoreHorizontal, PackagePlus, Plus, Search, SlidersHorizontal, X } from 'lucide-react'
@@ -34,6 +37,22 @@ export function Inventory({ stockCheck = false }: InventoryProps) {
   const [selected, setSelected] = useState<Product | null>(null)
   const [quantity, setQuantity] = useState('')
   const [notice, setNotice] = useState('')
+  const [editing, setEditing] = useState<{ product: InventoryProduct; initial: ManagementRow } | null>(null)
+  const [editFailure, setEditFailure] = useState('')
+  const openEditor = (product: InventoryProduct) => {
+    setEditFailure('')
+    setEditing({ product, initial: inventoryEditorRow(product, product.details) })
+  }
+  const saveProductDetails = (values: ManagementRow) => {
+    if (!editing) return
+    try {
+      const record = saveInventoryEditorRow(editing.initial, values)
+      setRows((current) => current.flatMap((product) => product.id !== editing.product.id ? [product] : record.productType !== 'Hàng hóa thường' ? [] : [{ ...product, id: String(record.code), sku: String(record.code), name: String(record.name), category: String(record.category), price: Number(record.price), stock: Number(record.stock ?? 0), image: String(record.image ?? ''), details: record }]))
+      setEditing(null); setExpandedProduct(null)
+      setNotice('Đã cập nhật sản phẩm trong dữ liệu demo.')
+      window.setTimeout(() => setNotice(''), 2800)
+    } catch (error) { setEditFailure(errorMessage(error)) }
+  }
 
   const filtered = useMemo(() => rows.filter((product) => {
     const matchesSearch = `${product.name} ${product.sku}`.toLocaleLowerCase('vi').includes(search.toLocaleLowerCase('vi'))
@@ -97,13 +116,14 @@ export function Inventory({ stockCheck = false }: InventoryProps) {
         </div>
         <div className="table-scroll"><table className="data-table inventory-table"><thead><tr><th>Sản phẩm / SKU</th><th>Danh mục</th><th>Chi nhánh</th><th>Hiện tại</th><th>Định mức tối thiểu</th><th>Trạng thái</th><th aria-label="Thao tác" /></tr></thead><tbody>{filtered.map((product) => <Fragment key={product.id}><tr className="record-expandable-row" tabIndex={0} aria-expanded={expandedProduct === product.id} onClick={() => setExpandedProduct((current) => current === product.id ? null : product.id)} onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); setExpandedProduct((current) => current === product.id ? null : product.id) } }}>
           <td><div className="product-cell"><ProductArtwork product={product} compact /><span><strong>{product.name}</strong><small>{product.sku}</small></span></div></td>
-          <td className="inventory-category">{product.category === 'Retail SKU' ? 'Thành phẩm' : 'Nguyên liệu'}</td><td className="inventory-branch">Mộc Store</td><td data-label="Hiện tại"><strong className="stock-number">{product.stock} {product.id === 'tea-01' ? 'l' : product.id === 'retail-01' ? 'cái' : 'kg'}</strong></td><td data-label="Định mức tối thiểu">{product.minimum} {product.id === 'retail-01' ? 'cái' : 'kg'}</td><td data-label="Trạng thái"><span className={`status-badge ${product.stock <= product.minimum ? 'low' : 'in-stock'}`}><i />{product.stock <= product.minimum ? 'Sắp hết' : 'Đang tốt'}</span></td><td className="inventory-actions"><button className="row-menu" type="button" aria-label={`Thao tác ${product.name}`} onClick={(event) => { event.stopPropagation(); setSelected(product); setDialog('adjust') }}><MoreHorizontal size={18} /></button></td>
+          <td className="inventory-category">{product.category === 'Retail SKU' ? 'Thành phẩm' : 'Nguyên liệu'}</td><td className="inventory-branch">Mộc Store</td><td data-label="Hiện tại"><strong className="stock-number">{product.stock} {product.id === 'tea-01' ? 'l' : product.id === 'retail-01' ? 'cái' : 'kg'}</strong></td><td data-label="Định mức tối thiểu">{product.minimum} {product.id === 'retail-01' ? 'cái' : 'kg'}</td><td data-label="Trạng thái"><span className={`status-badge ${product.stock <= product.minimum ? 'low' : 'in-stock'}`}><i />{product.stock <= product.minimum ? 'Sắp hết' : 'Đang tốt'}</span></td><td className="inventory-actions"><button className="row-menu" type="button" aria-label={`Thao tác ${product.name}`} onClick={(event) => { event.stopPropagation(); openEditor(product) }}><MoreHorizontal size={18} /></button></td>
         </tr>{expandedProduct === product.id && <tr className="record-detail-row"><td colSpan={7}><div className="record-detail-content product-detail-grid"><ProductDetails product={{...product.details,code:product.sku,name:product.name,productType:'Hàng hóa thường',price:product.price,stock:product.stock}} /></div></td></tr>}</Fragment>)}</tbody></table></div>
         {filtered.length === 0 && <div className="empty-state"><Search size={24} /><strong>Không tìm thấy sản phẩm</strong><span>Thử thay đổi từ khóa hoặc bộ lọc.</span></div>}
         <div className="table-footer"><span>Hiển thị <strong>{filtered.length ? 1 : 0}–{filtered.length}</strong> trong <strong>{filtered.length}</strong> sản phẩm</span><div className="pagination"><button type="button" aria-label="Trang trước" disabled><ChevronLeft size={16} /></button><button className="current-page" type="button">1</button><button type="button" aria-label="Trang sau" disabled><ChevronRight size={16} /></button></div></div>
       </section>
 
       {notice && <div className="toast"><span className="toast-check">✓</span>{notice}</div>}
+      {editing && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setEditing(null) }}><section className="modal-card record-dialog" role="dialog" aria-modal="true" aria-labelledby="inventory-product-editor-title"><button className="modal-close" type="button" onClick={() => setEditing(null)} aria-label="Đóng"><X size={18} /></button><h2 id="inventory-product-editor-title">Cập nhật sản phẩm</h2><p>Thông tin được lưu trong dữ liệu demo trên thiết bị.</p>{editFailure && <p className="form-error" role="alert">{editFailure}</p>}<ProductEditor initial={editing.initial} nextProductCode={String(editing.initial.code)} onCancel={() => setEditing(null)} onSave={saveProductDetails} /></section></div>}
       {dialog && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setDialog(null) }}><section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="stock-dialog-title">
         <button className="modal-close" type="button" onClick={() => setDialog(null)} aria-label="Đóng"><X size={18} /></button>
         <span className="modal-icon"><PackagePlus size={19} /></span><h2 id="stock-dialog-title">{dialog === 'receive' ? 'Nhập hàng vào kho' : 'Điều chỉnh tồn kho'}</h2><p>{dialog === 'receive' ? 'Ghi nhận số lượng hàng mới cho sản phẩm.' : 'Cập nhật số lượng kiểm đếm thực tế.'}</p>

@@ -322,7 +322,7 @@ function MultiSelectField({ field, defaultValue }: { field: ManagementModule['fi
 
 type ProductUnit = { name: string; ratio: number; cost: number; price: number; _costWasUnset?: boolean }
 
-function ProductEditor({ initial, nextProductCode, onCancel, onSave, remote = false, categoryOptions = [], onCreateCategory, saving = false }: { initial: ManagementRow | null; nextProductCode: string; onCancel: () => void; onSave: (values: ManagementRow) => void; remote?: boolean; categoryOptions?: string[]; onCreateCategory?: (name: string) => Promise<string>; saving?: boolean }) {
+export function ProductEditor({ initial, nextProductCode, onCancel, onSave, remote = false, categoryOptions = [], onCreateCategory, saving = false }: { initial: ManagementRow | null; nextProductCode: string; onCancel: () => void; onSave: (values: ManagementRow) => void; remote?: boolean; categoryOptions?: string[]; onCreateCategory?: (name: string) => Promise<string>; saving?: boolean }) {
   const [productType, setProductType] = useState(String(initial?.productType ?? 'Hàng hóa thường'))
   const [categories, setCategories] = useState<string[]>(() => {
     if (remote) return categoryOptions
