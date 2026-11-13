@@ -1,3 +1,4 @@
+import { ApiPurchaseWorkspace } from '../purchases/ApiPurchaseWorkspace'
 import { ProductDetails } from '../../components/products/ProductDetails'
 import { expandAttributes, type ProductAttribute } from '../../utils/productOptions'
 import { formatCashDate } from '../../api/cashbook'
@@ -59,7 +60,7 @@ function nextCode(rows: ManagementRow[], prefix: string, digits: number) {
 export function ManagementRecordPage({ moduleId }: { moduleId: string }) {
   const module = managementModules.find((item) => item.id === moduleId)
   if (!module) return null
-  if (moduleId === 'purchases') return <PurchaseWorkspace />
+  if (moduleId === 'purchases') return apiConfig.useMock ? <PurchaseWorkspace /> : <ApiPurchaseWorkspace />
   return <RecordWorkspace key={module.id} module={module} />
 }
 
