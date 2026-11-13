@@ -1,4 +1,7 @@
 import { ProductDetails } from '../../components/products/ProductDetails'
+import { useNavigate } from 'react-router-dom'
+import { apiConfig } from '../../api/config'
+import { useSessionStore } from '../../api/auth'
 import type { ManagementRow } from '../management/moduleConfig'
 import { Fragment, useMemo, useState } from 'react'
 import { ChevronDown, ChevronLeft, ChevronRight, ClipboardCheck, Download, MoreHorizontal, PackagePlus, Plus, Search, SlidersHorizontal, X } from 'lucide-react'
@@ -11,6 +14,10 @@ type InventoryProduct = Product & { details?: ManagementRow }
 type InventoryProps = { stockCheck?: boolean }
 
 export function Inventory({ stockCheck = false }: InventoryProps) {
+  const navigate = useNavigate()
+  const role = useSessionStore((state) => state.session?.user.role)
+  const canCreate = apiConfig.useMock || role === 'owner' || role === 'manager'
+  const createProduct = () => navigate('/management/menu-items', { state: { createProduct: true } })
   const catalog = useMemo<InventoryProduct[]>(() => {
     try {
       const saved: unknown = JSON.parse(localStorage.getItem('fnb-management:menu-items') ?? 'null')
@@ -68,7 +75,7 @@ export function Inventory({ stockCheck = false }: InventoryProps) {
     <div className="inventory-page">
       <div className="page-title-row">
         <div><h1>{stockCheck ? 'Kiểm kho' : 'Quản lý hàng hóa'}</h1><p>{stockCheck ? 'Theo dõi và điều chỉnh số lượng tồn tại cửa hàng' : 'Theo dõi số lượng và tình trạng hàng hóa tại cửa hàng'}</p></div>
-        <div className="page-actions"><button className="button button-secondary" type="button" onClick={exportCsv}><Download size={16} /> Xuất file</button><button className="button button-primary" type="button" onClick={() => { setDialog('receive'); setSelected(rows[0] ?? null) }}><PackagePlus size={16} /> Nhập kho</button></div>
+        <div className="page-actions"><button className="button button-secondary" type="button" onClick={exportCsv}><Download size={16} /> Xuất file</button><button className="button button-primary" type="button" disabled={!canCreate} onClick={createProduct}><Plus size={16} /> Tạo mới sản phẩm</button><button className="button button-primary" type="button" onClick={() => { setDialog('receive'); setSelected(rows[0] ?? null) }}><PackagePlus size={16} /> Nhập kho</button></div>
       </div>
 
       <section className="inventory-metrics">
@@ -77,7 +84,7 @@ export function Inventory({ stockCheck = false }: InventoryProps) {
         <article className="inventory-metric"><span>Giá trị tồn kho</span><strong>{formatCurrency(inventorySummary.inventoryValue)}</strong><small>Theo giá bán lẻ</small></article>
         <article className="inventory-metric inventory-metric-mobile"><span>Sắp hết</span><strong>{inventorySummary.lowStockCount}</strong></article>
       </section>
-      <div className="inventory-mobile-actions"><button className="button button-primary" type="button" onClick={() => { setDialog('receive'); setSelected(rows[0] ?? null) }}><PackagePlus size={15} /> Nhập kho</button><button className="button button-secondary" type="button" onClick={() => { setDialog('adjust'); setSelected(rows[0] ?? null) }}><ClipboardCheck size={15} /> Điều chỉnh tồn</button></div>
+      <div className="inventory-mobile-actions"><button className="button button-primary" type="button" onClick={() => { setDialog('receive'); setSelected(rows[0] ?? null) }}><PackagePlus size={15} /> Nhập kho</button><button className="button button-secondary" type="button" onClick={() => { setDialog('adjust'); setSelected(rows[0] ?? null) }}><ClipboardCheck size={15} /> Điều chỉnh tồn</button><button className="button button-primary" type="button" disabled={!canCreate} onClick={createProduct}><Plus size={15} /> Tạo mới sản phẩm</button></div>
 
       <section className="panel inventory-list-panel">
         <div className="inventory-toolbar">

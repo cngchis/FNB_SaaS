@@ -152,6 +152,13 @@ function RecordWorkspace({ module }: { module: ManagementModule }) {
   const [branchFilter, setBranchFilter] = useState('Tất cả chi nhánh')
 
   const remote = useRemoteRecords(module.id, page, query, filter, sortKey, ascending, { from: dateFrom, to: dateTo, cashTab, branch: branchFilter })
+  useEffect(() => {
+    if (module.id !== 'menu-items' || location.state?.createProduct !== true || remote.loading || remote.error) return
+    setEditing(null)
+    setFormOpen(true)
+    // Consume the intent so closing the dialog or going back cannot reopen it.
+    navigate(location.pathname + location.search + location.hash, { replace: true, state: null })
+  }, [module.id, location.state, location.pathname, location.search, location.hash, remote.loading, remote.error, navigate])
   const footerRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!remote.hasMore || remote.fetchingMore || remote.loading || !footerRef.current) return

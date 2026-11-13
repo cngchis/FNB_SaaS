@@ -49,3 +49,17 @@ Fixture PostgreSQL native 18.3 riêng đã chạy migration 5 up/down/up. **Khô
 6. Upload ảnh tiếp tục để sau theo yêu cầu trước đó.
 
 Không tự commit/push. Commit gợi ý sau khi xử lý điểm mobile: `feat(purchasing): connect receipt workspace to backend APIs`.
+
+## Cập nhật: tạo sản phẩm từ Quản lý hàng hóa — 14/11
+
+Đã xác nhận nguồn lệch trong code: Kiểm kho/Quản lý hàng hóa vẫn đọc localStorage prototype, trong khi Nhập hàng API đọc bảng `products`. Người dùng xác nhận “Bia” không có ở Danh sách món thật. Không tự sao chép hoặc seed sản phẩm demo vào database thật.
+
+Theo yêu cầu mới, thêm nút `Tạo mới sản phẩm` vào các nhóm thao tác sẵn có trên desktop và mobile của Quản lý hàng hóa. Nút điều hướng đến `/management/menu-items` với ý định mở ngay form tạo Món sẵn có; không tạo form thứ hai hoặc đổi CSS. Chờ danh mục API tải xong mới mở form; tiêu thụ ý định điều hướng để đóng form không tự mở lại. Owner/manager tạo được trong API mode; cashier/kitchen bị vô hiệu hóa nút. Backend vẫn kiểm tra quyền.
+
+Sau khi tạo hàng hóa thường, dữ liệu được lưu bằng API Món hiện có và có thể tìm lại ở Nhập hàng. Bảng Quản lý hàng hóa và nghiệp vụ Kiểm kho vẫn demo; thay đổi này **không** đồng nghĩa đã nối tồn kho/kiểm kho với API. Không thay dữ liệu thực bằng tồn demo, không tự tạo “Bia” cho người dùng.
+
+Test bổ sung kiểm tra nút và lưu sản phẩm ở mock, và luồng API tạo “Bia” → tìm trong phiếu nhập ở cả desktop/mobile. Test tìm kiếm riêng kiểm tra tên tiếng Việt, SKU, đơn vị cơ bản và loại trừ prepared/non-stock goods. Cập nhật đúng hai ảnh inventory desktop/mobile cho nút được yêu cầu sau khi xem trước/sau; các ảnh khác giữ nguyên.
+
+Commit gợi ý: `feat(inventory): add product creation action using the existing catalog editor`.
+
+Kiểm chứng cập nhật nút tạo: TypeScript/build PASS; 40 unit test PASS; 6 E2E mock món/cart/tạo hàng PASS; bộ API 23 PASS và 1 test nhập hàng mobile cũ vẫn `fixme` chờ duyệt. Đã kiểm tra ảnh inventory trước/sau: desktop thêm đúng nút trong header, mobile thêm nút trong nhóm thao tác sẵn có. Không sửa CSS hoặc dữ liệu thật.
