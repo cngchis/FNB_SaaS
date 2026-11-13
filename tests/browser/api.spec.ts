@@ -606,3 +606,56 @@ test('real API: dashboard and reports use scoped server aggregates and existing 
   await expect(page.getByRole('status')).toContainText('Không thể tải hoặc lưu dữ liệu trên server')
   expect(errors).toEqual([])
 })
+
+test('real suppliers: search, paging, inline details, CRUD, CSV and derived debt', async ({ page, request }, info) => {
+  test.skip(!tenant || !email || !password, 'Use the isolated PostgreSQL fixture.')
+  const response=await request.post(`${base}/api/v1/auth/login`,{data:{tenant_slug:tenant,email,password}})
+  const {data:session}=await response.json()
+  const headers={Authorization:`Bearer ${session.access_token}`}
+  const prefix=`Suppliers ${info.project.name} ${Date.now()}`
+  for(let index=0;index<7;index++) {
+    const created=await request.post(`${base}/api/v1/suppliers`,{headers:{...headers,'Idempotency-Key':crypto.randomUUID()},data:{name:`${prefix} ${index}`,phone:'0900000000'}})
+    expect(created.status()).toBe(201)
+  }
+  await page.addInitScript(() => localStorage.setItem('fnb-management:suppliers',JSON.stringify([{name:'POISON SUPPLIER',debt:99999999}])))
+  await signIn(page,'/management/suppliers')
+  await expect(page.getByText('POISON SUPPLIER')).toHaveCount(0)
+  const search=page.getByRole('textbox',{name:'Tìm tên, mã hoặc số điện thoại...'})
+  await search.fill(prefix)
+  await expect(page.locator('tbody tr.record-expandable-row').first()).toContainText(prefix)
+  if(info.project.name==='desktop') {
+    await page.getByRole('button',{name:'Trang sau',exact:true}).click()
+    await expect(page.locator('tbody tr.record-expandable-row')).toHaveCount(1)
+  } else {
+    await page.locator('.record-page .table-footer').scrollIntoViewIfNeeded()
+    await expect(page.locator('tbody tr.record-expandable-row')).toHaveCount(7)
+  }
+  await page.getByRole('button',{name:'Thêm nhà cung cấp',exact:true}).click()
+  let dialog=page.getByRole('dialog')
+  const name=`${prefix} new`
+  await dialog.getByLabel('Tên nhà cung cấp',{exact:true}).fill(name)
+  await dialog.getByLabel('Người liên hệ',{exact:true}).fill('Contact A')
+  await dialog.getByLabel('Số điện thoại',{exact:true}).fill('0901234567')
+  await expect(dialog.getByLabel('Công nợ (₫)',{exact:true})).toHaveAttribute('readonly','')
+  await dialog.getByLabel('Địa chỉ',{exact:true}).fill('Địa chỉ kiểm thử')
+  await dialog.getByRole('button',{name:'Thêm nhà cung cấp',exact:true}).click()
+  await expect(dialog).toHaveCount(0)
+  await search.fill(name)
+  const row=page.locator('tbody tr.record-expandable-row').filter({hasText:name})
+  await expect(row).toHaveCount(1)
+  await row.click()
+  await expect(page.locator('.record-detail-content')).toContainText('Contact A')
+  await row.getByRole('button',{name:/^Sửa /}).click()
+  dialog=page.getByRole('dialog')
+  await dialog.getByLabel('Người liên hệ',{exact:true}).fill('Contact B')
+  await dialog.getByRole('button',{name:'Lưu thay đổi',exact:true}).click()
+  await expect(dialog).toHaveCount(0)
+  await expect(row).toContainText('Contact B')
+  const downloadEvent=page.waitForEvent('download')
+  await page.getByRole('button',{name:'Xuất file',exact:true}).click()
+  const download=await downloadEvent
+  expect(await readFile((await download.path())!,'utf8')).toContain(name)
+  await row.getByRole('button',{name:/^Xóa /}).click()
+  await page.getByRole('button',{name:'Xóa bản ghi',exact:true}).click()
+  await expect(row).toHaveCount(0)
+})

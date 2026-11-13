@@ -1,5 +1,7 @@
 # Báo cáo tiến độ và bàn giao cho agent tiếp theo
 
+> **Nhập kho 13/11:** đã có backend migration 5 và CRUD Nhà cung cấp; giao diện Phiếu nhập chờ duyệt ngoại lệ UI. Xem [tiến độ nhập kho](./purchasing-stock-progress-vi.md).
+
 > **Cập nhật Dashboard/Báo cáo 13/11:** đã nối read model theo cửa hàng; xem [tiến độ báo cáo](./reports-api-progress-vi.md) và các giới hạn trước khi tiếp tục.
 
 > **Cập nhật Sổ quỹ:** đã nối khoản thu POS và phiếu thu/chi nhập tay với database. Cần migration 4; xem [tiến độ Sổ quỹ](./cashbook-progress-vi.md).

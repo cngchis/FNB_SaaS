@@ -19,7 +19,7 @@ export function AuthGuard() {
   const [acknowledgedDemo, setAcknowledgedDemo] = useState(false)
   if (!apiConfig.useMock && !session) return <Navigate to="/login" replace state={{ from: location.pathname }} />
   const connected = [
-    '/management', '/management/', '/management/reports/sales', '/management/reports/finance', '/management/reports/end-of-day','/management/menu-items', '/management/customers', '/management/customer-groups', '/management/rooms', '/management/invoices', '/management/cashbook', '/pos'].includes(location.pathname)
+    '/management', '/management/', '/management/reports/sales', '/management/reports/finance', '/management/reports/end-of-day','/management/menu-items', '/management/customers', '/management/customer-groups', '/management/rooms', '/management/suppliers', '/management/invoices', '/management/cashbook', '/pos'].includes(location.pathname)
   return <><Outlet />{!apiConfig.useMock && !connected && !acknowledgedDemo && <div className="toast" role="status">Trang này vẫn dùng dữ liệu demo; chưa kết nối API nghiệp vụ.<button className="button button-secondary" type="button" onClick={() => setAcknowledgedDemo(true)}>Đã hiểu</button></div>}</>
 }
 

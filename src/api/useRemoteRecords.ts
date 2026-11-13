@@ -1,3 +1,4 @@
+import { useSupplierRecords } from './useSupplierRecords'
 import { useCashbookRecords } from './useCashbookRecords'
 import { useInvoiceRecords } from './useInvoiceRecords'
 import { roomsRepository } from './pos'
@@ -47,7 +48,8 @@ export function useRemoteRecords(moduleId: string, page: number, query: string, 
   const roomData = useQuery({ queryKey: ['api', scope, 'rooms'], enabled: enabled && moduleId === 'rooms', queryFn: ({ signal }) => roomsRepository.list(signal) })
   const invoiceData = useInvoiceRecords(enabled && moduleId === 'invoices', scope, mobile, page, search, filter, sort, ascending, dates)
   const cashData = useCashbookRecords(enabled && moduleId === 'cashbook', scope, mobile, page, search, filter, sort, ascending, dates)
-  const listEnabled = enabled && moduleId !== 'cashbook' && moduleId !== 'invoices' && moduleId !== 'rooms' && moduleId !== 'customer-groups' && (moduleId !== 'customers' || groups.isSuccess)
+  const supplierData = useSupplierRecords(enabled && moduleId === 'suppliers', scope, mobile, page, search, sort, ascending)
+  const listEnabled = enabled && moduleId !== 'suppliers' && moduleId !== 'cashbook' && moduleId !== 'invoices' && moduleId !== 'rooms' && moduleId !== 'customer-groups' && (moduleId !== 'customers' || groups.isSuccess)
   const records = useQuery({
     queryKey: ['api', scope, moduleId, options], enabled: listEnabled && !mobile,
     queryFn: ({ signal }) => fetchPage(page, signal),
@@ -119,11 +121,13 @@ export function useRemoteRecords(moduleId: string, page: number, query: string, 
     save: save.mutateAsync, remove: (id: string, _version?: number) => remove.mutateAsync(id), createCategory: createCategory.mutateAsync,
     retry: invalidate, exportRows,
     summary: invoice ? invoiceData.summary : undefined,
+    supplierDebt: moduleId === 'suppliers' ? supplierData.supplierDebt : undefined,
     cashSummary: moduleId === 'cashbook' ? cashData.cashSummary : undefined,
     branches: (session?.stores ?? []).filter((store) => session?.user.role !== 'cashier' || store.id === session.store_id),
     storeID: session?.store_id ?? '',
     userName: session?.user.display_name ?? '',
     canSort: (key: string) => moduleId === 'customer-groups' || moduleId === 'rooms' || Boolean((moduleId === 'menu-items' ? productSort : customerSort)[key]),
+    ...(moduleId === 'suppliers' ? { ...supplierData, rows: search === query ? supplierData.rows : [], loading: remote && (search !== query || supplierData.loading), error: supplierData.error ? errorMessage(supplierData.error) : '', hasMore: search === query && supplierData.hasMore } : {}),
     ...(invoice ? { rows: search === query ? invoiceData.rows : [], total: invoiceData.total, pages: invoiceData.pages, loading: remote && (search !== query || invoiceData.loading), error: invoiceData.error ? errorMessage(invoiceData.error) : '', hasMore: search === query && invoiceData.hasMore, fetchingMore: invoiceData.fetchingMore, loadMore: invoiceData.loadMore, canSort: invoiceData.canSort, exportRows: invoiceData.exportRows } : {}),
     ...(moduleId === 'cashbook' ? { ...cashData, rows: search === query ? cashData.rows : [], loading: remote && (search !== query || cashData.loading), error: cashData.error ? errorMessage(cashData.error) : '', hasMore: search === query && cashData.hasMore } : {}),
   }

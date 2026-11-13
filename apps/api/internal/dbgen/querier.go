@@ -55,9 +55,13 @@ type Querier interface {
 	ReadCashbook(ctx context.Context, arg ReadCashbookParams) ([]byte, error)
 	// A single statement gives rows, payment totals and metrics the same snapshot.
 	ReadInvoices(ctx context.Context, arg ReadInvoicesParams) ([]byte, error)
+	ReadPurchases(ctx context.Context, arg ReadPurchasesParams) ([]byte, error)
 	// Revenue uses issued invoices at first issue time. Cash flow uses settlement time.
 	// Aggregate payments and lines before joining orders to avoid multiplication.
 	ReadReport(ctx context.Context, arg ReadReportParams) ([]byte, error)
+	ReadStockBalances(ctx context.Context, arg ReadStockBalancesParams) ([]ReadStockBalancesRow, error)
+	ReadStockMovements(ctx context.Context, arg ReadStockMovementsParams) ([]ReadStockMovementsRow, error)
+	ReadSuppliers(ctx context.Context, arg ReadSuppliersParams) ([]byte, error)
 	UpdateCustomer(ctx context.Context, arg UpdateCustomerParams) (Customer, error)
 	UpdateCustomerGroup(ctx context.Context, arg UpdateCustomerGroupParams) (CustomerGroup, error)
 	UpdateProduct(ctx context.Context, arg UpdateProductParams) (Product, error)

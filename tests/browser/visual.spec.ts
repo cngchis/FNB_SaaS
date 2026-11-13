@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test'
 
 const routes = [
   '/management', '/management/menu-items', '/management/inventory',
-  '/management/orders', '/management/invoices', '/management/reports/sales', '/pos',
+  '/management/orders', '/management/invoices', '/management/suppliers', '/management/purchases', '/management/reports/sales', '/pos',
 ]
 
 for (const route of routes) {

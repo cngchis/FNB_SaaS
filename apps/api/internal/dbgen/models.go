@@ -289,6 +289,38 @@ type ProductVariant struct {
 	DeletedAt     pgtype.Timestamptz `json:"deleted_at"`
 }
 
+type PurchaseReceipt struct {
+	ID         pgtype.UUID        `json:"id"`
+	TenantID   pgtype.UUID        `json:"tenant_id"`
+	StoreID    pgtype.UUID        `json:"store_id"`
+	SupplierID pgtype.UUID        `json:"supplier_id"`
+	Code       string             `json:"code"`
+	Status     string             `json:"status"`
+	TotalVnd   int64              `json:"total_vnd"`
+	Note       string             `json:"note"`
+	Version    int64              `json:"version"`
+	CreatedBy  pgtype.UUID        `json:"created_by"`
+	PostedBy   pgtype.UUID        `json:"posted_by"`
+	PostedAt   pgtype.Timestamptz `json:"posted_at"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+}
+
+type PurchaseReceiptItem struct {
+	ID          pgtype.UUID        `json:"id"`
+	TenantID    pgtype.UUID        `json:"tenant_id"`
+	StoreID     pgtype.UUID        `json:"store_id"`
+	ReceiptID   pgtype.UUID        `json:"receipt_id"`
+	ProductID   pgtype.UUID        `json:"product_id"`
+	ProductName string             `json:"product_name"`
+	Sku         string             `json:"sku"`
+	UnitName    string             `json:"unit_name"`
+	Quantity    int64              `json:"quantity"`
+	UnitCostVnd int64              `json:"unit_cost_vnd"`
+	TotalVnd    int64              `json:"total_vnd"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
 type Role struct {
 	Slug      string             `json:"slug"`
 	Name      string             `json:"name"`
@@ -312,12 +344,48 @@ type Room struct {
 	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
 }
 
+type StockBalance struct {
+	TenantID  pgtype.UUID        `json:"tenant_id"`
+	StoreID   pgtype.UUID        `json:"store_id"`
+	ProductID pgtype.UUID        `json:"product_id"`
+	Quantity  string             `json:"quantity"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+type StockMovement struct {
+	ID            pgtype.UUID        `json:"id"`
+	TenantID      pgtype.UUID        `json:"tenant_id"`
+	StoreID       pgtype.UUID        `json:"store_id"`
+	ProductID     pgtype.UUID        `json:"product_id"`
+	ReceiptItemID pgtype.UUID        `json:"receipt_item_id"`
+	QuantityDelta string             `json:"quantity_delta"`
+	UnitName      string             `json:"unit_name"`
+	UnitCostVnd   int64              `json:"unit_cost_vnd"`
+	CreatedBy     pgtype.UUID        `json:"created_by"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
 type Store struct {
 	ID        pgtype.UUID        `json:"id"`
 	TenantID  pgtype.UUID        `json:"tenant_id"`
 	Name      string             `json:"name"`
 	Slug      string             `json:"slug"`
 	Timezone  string             `json:"timezone"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
+}
+
+type Supplier struct {
+	ID        pgtype.UUID        `json:"id"`
+	TenantID  pgtype.UUID        `json:"tenant_id"`
+	Code      string             `json:"code"`
+	Name      string             `json:"name"`
+	Contact   string             `json:"contact"`
+	Phone     string             `json:"phone"`
+	Address   string             `json:"address"`
+	Note      string             `json:"note"`
+	Version   int64              `json:"version"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 	DeletedAt pgtype.Timestamptz `json:"deleted_at"`

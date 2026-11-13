@@ -162,7 +162,7 @@ func TestCashbook(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := goose.DownContext(context.Background(), db, migrations); err != nil {
+	if err := goose.DownToContext(context.Background(), db, migrations, 3); err != nil {
 		t.Fatal(err)
 	}
 	if err := goose.UpContext(context.Background(), db, migrations); err != nil {

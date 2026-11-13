@@ -109,3 +109,22 @@ See [ADR-007](../../docs/ADR-007-report-read-model.md) for accounting semantics 
 [the Vietnamese progress report](../../docs/reports-api-progress-vi.md) for UI
 limits and verification. The payment donut awaits approval for two label changes;
 shift closing and inventory reports are not implemented as real accounting yet.
+
+## Purchasing and incoming stock
+
+Migration 5 adds supplier CRUD, draft receipts, idempotent posting and an append-only
+incoming ledger with a synchronous balance projection. Owner/manager only; receipts
+and balances are scoped to the JWT-selected store. All writes except supplier delete
+require an `Idempotency-Key`; updates/posting require an optimistic `version`.
+
+Run migration 5 using the migration administrator before restarting this API. Do not
+bootstrap again. The new product guard rejects changing stock identity or deleting a
+product after receipt movements exist. Posting does not settle supplier debt or create
+a cashbook payment. POS deductions/BOM/stocktakes are not implemented by this migration.
+
+The supplier frontend is connected. The purchase frontend remains a prototype until
+the user approves its posting/reopen interaction and demo-caption exception under UI
+FREEZE. See [ADR-008](../../docs/ADR-008-purchasing-stock-ledger.md) and the
+[Vietnamese progress report](../../docs/purchasing-stock-progress-vi.md) for scope,
+API endpoints and rollout commands. Never run down migrations against real receipt
+history; rollback is exercised only in isolated test databases.
