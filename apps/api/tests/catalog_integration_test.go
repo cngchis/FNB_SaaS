@@ -23,6 +23,7 @@ import (
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/invoice"
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/pos"
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/product"
+	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/report"
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/room"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
@@ -198,6 +199,7 @@ func moduleTestFixture(t *testing.T) moduleFixture {
 	pos.RegisterRoutes(secured, runtime)
 	cashbook.RegisterRoutes(secured, runtime)
 	invoice.RegisterRoutes(secured, runtime)
+	report.RegisterRoutes(secured, runtime)
 	server = httptest.NewServer(engine)
 	f.runtime = runtime
 	f.base = server.URL

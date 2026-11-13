@@ -1,5 +1,7 @@
 # Báo cáo tiến độ và bàn giao cho agent tiếp theo
 
+> **Cập nhật Dashboard/Báo cáo 13/11:** đã nối read model theo cửa hàng; xem [tiến độ báo cáo](./reports-api-progress-vi.md) và các giới hạn trước khi tiếp tục.
+
 > **Cập nhật Sổ quỹ:** đã nối khoản thu POS và phiếu thu/chi nhập tay với database. Cần migration 4; xem [tiến độ Sổ quỹ](./cashbook-progress-vi.md).
 
 > **Cập nhật công nợ:** đã nối dòng nợ trước đó và luồng thu thêm tiền trong POS. Xem [tiến độ công nợ](./customer-debt-progress-vi.md).

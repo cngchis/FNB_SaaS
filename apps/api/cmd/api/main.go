@@ -22,6 +22,7 @@ import (
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/invoice"
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/pos"
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/product"
+	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/report"
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/room"
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/shared/httpx"
 )
@@ -82,6 +83,7 @@ func run() error {
 	pos.RegisterRoutes(secured, pool)
 	cashbook.RegisterRoutes(secured, pool)
 	invoice.RegisterRoutes(secured, pool)
+	report.RegisterRoutes(secured, pool)
 	api.GET("/me", auth.Authenticate(pool, cfg.JWTSecret), func(c *gin.Context) {
 		identity, ok := auth.CurrentIdentity(c)
 		if !ok {

@@ -1,5 +1,7 @@
 # Tiến độ Sổ quỹ thật
 
+> **Cập nhật Dashboard/Báo cáo 13/11:** đã nối read model theo cửa hàng; xem [tiến độ báo cáo](./reports-api-progress-vi.md) và các giới hạn trước khi tiếp tục.
+
 Cập nhật: 10/11/2026.
 
 ## Đã triển khai

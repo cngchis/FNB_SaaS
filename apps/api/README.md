@@ -92,3 +92,20 @@ With `TEST_DATABASE_ADMIN_URL` and `TEST_DATABASE_URL` (plus optional password o
 - Stock ledgers, recipe-derived costs and object storage/image uploads are not implemented. `image_url` accepts URLs or absolute asset paths, not base64 data URLs.
 - Live integration checks need database/account credentials supplied through environment variables. SQLC generation covers catalog, customers and initial auth lookups; session queries still use pgx directly.
 - The API GitHub Actions workflow targets PostgreSQL 16; it has not run yet. Agent-executed native integration checks used an isolated PostgreSQL 18.3 cluster, not the user's existing database.
+
+## Store reporting
+
+`GET /api/v1/reports/summary` accepts required `date_from`, `date_to`
+(`YYYY-MM-DD`, inclusive Vietnam business dates), and `granularity=hour|day`.
+Hour ranges are limited to one day; day ranges to 366 days. Owner, manager and
+cashier read only their JWT-selected store; kitchen is denied.
+
+The response separates issued invoice revenue/current debt from settled payments
+and posted cashbook flow. Costs use historical item snapshots and remain null
+when unavailable. This module requires the existing migration 4; no new migration
+or bootstrap is needed. Restart the API after updating source.
+
+See [ADR-007](../../docs/ADR-007-report-read-model.md) for accounting semantics and
+[the Vietnamese progress report](../../docs/reports-api-progress-vi.md) for UI
+limits and verification. The payment donut awaits approval for two label changes;
+shift closing and inventory reports are not implemented as real accounting yet.
