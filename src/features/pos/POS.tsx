@@ -1,3 +1,5 @@
+import { DiscountDialog } from './DiscountDialog'
+import { expandAttributes, optionPrice } from '../../utils/productOptions'
 import { apiConfig } from '../../api/config'
 import { usePosController } from '../../api/usePosController'
 import { customersRepository } from '../../api/catalog'
@@ -44,6 +46,7 @@ export function POS() {
   const [receipt, setReceipt] = useState('')
   const [ordersOpen, setOrdersOpen] = useState(false)
   const [paymentOptionsOpen, setPaymentOptionsOpen] = useState(false)
+  const [discountOpen, setDiscountOpen] = useState(false)
   const [cartExpanded, setCartExpanded] = useState(false)
   const [catalogTab, setCatalogTab] = useState<'tables' | 'menu'>('tables')
   const [temporaryOpen, setTemporaryOpen] = useState(false)
@@ -80,8 +83,7 @@ export function POS() {
   const customers = remote.remote ? ['Khách lẻ', ...remote.customers.map((person) => person.name)] : mockCustomers
   const subtotal = items.reduce((total, line) => total + line.product.price * line.quantity, 0)
   const total = Math.max(0, subtotal - discount)
-  const paidInCart = Math.min(total, Math.max(0, Number(paidAmount) || 0))
-  const debt = Math.max(0, total - paidInCart - paidBefore)
+  const debt = Math.max(0, total - paidBefore)
   const mockCustomerDebt = useMemo(() => {
     if (!apiConfig.useMock) return 0
     try {
@@ -172,14 +174,15 @@ export function POS() {
         <div className="cart-metadata"><label>Khách hàng<select disabled={remote.busy} value={remote.remote ? customerID ?? '' : customer} onChange={(event) => { if (event.target.value === '__create__') setNewCustomerOpen(true); else if (remote.remote) { const person = remote.customers.find((p) => p.id === event.target.value); setCustomer(person?.name ?? 'Khách lẻ'); usePosStore.setState({ customerID: person?.id ?? null }) } else setCustomer(event.target.value) }}>{remote.remote ? <><option value="">Khách lẻ</option>{remote.customers.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</> : customers.map((item) => <option key={item}>{item}</option>)}<option value="__create__">＋ Tạo mới khách hàng</option></select></label></div>
         <div className="cart-lines">{items.map(({ product, quantity }) => <CartItem key={product.id} product={product} quantity={quantity} onChange={(id, quantity) => { if (!remote.busy) setQuantity(id, quantity) }} onRemove={(id) => { if (!remote.busy) remove(id) }} />)}{items.length === 0 && <div className="cart-empty"><span className="cart-empty-icon"><ShoppingBag size={22} /></span><strong>Đơn hàng đang trống</strong><p>Chọn sản phẩm để bắt đầu tạo đơn.</p></div>}</div>
         <div className="cart-note"><label htmlFor="order-note">Ghi chú đơn hàng</label><textarea id="order-note" value={note} disabled={remote.busy} onChange={(event) => setNote(event.target.value)} placeholder="Thêm ghi chú..." rows={2} /></div>
-        <div className="discount-row"><span>Giảm giá</span><label><input type="number" min="0" max={subtotal} disabled={remote.busy} value={discount || ''} onChange={(event) => setDiscount(Math.min(subtotal, Number(event.target.value) || 0))} placeholder="0" /><span>₫</span></label></div>
-        <label className="cart-paid-field">Khách thanh toán<input type="number" min="0" disabled={remote.busy} value={paidAmount} onChange={(event) => setPaidAmount(event.target.value)} placeholder="0 ₫" /></label>
+        <div className="discount-row"><span>Giảm giá</span><label><input type="text" aria-label="Giảm giá đơn hàng" aria-haspopup="dialog" readOnly disabled={remote.busy} value={discount || ''} onClick={() => setDiscountOpen(true)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setDiscountOpen(true) } }} placeholder="0" /><span>₫</span></label></div>
+        <div className="cart-paid-field"><span>Khách thanh toán</span><strong>{formatCurrency(paidBefore)}</strong></div>
         <div className="totals"><div><span>Tạm tính</span><strong>{formatCurrency(subtotal)}</strong></div>{discount > 0 && <div><span>Giảm giá</span><strong className="discount-amount">−{formatCurrency(discount)}</strong></div>}<div className="total-line"><strong>Khách cần trả</strong><strong>{formatCurrency(total)}</strong></div><div className="debt-line"><span>Nợ hóa đơn này</span><strong>{formatCurrency(debt)}</strong></div>{((remote.remote && customerID) || customerDebt > 0) && <div className="debt-line"><span>Nợ trước đó · {customer}</span><strong>{remote.remote && (remote.debtPending || remote.error) ? '—' : formatCurrency(customerDebt)}</strong></div>}</div>
         <button className="cart-estimate-button" type="button" disabled={!items.length || remote.busy || Boolean(remote.error)} onClick={() => void estimate()}><ReceiptText size={16} /> Tạm tính</button>
         <div className="payment-actions"><button className="pay-cash" type="button" disabled={!items.length || remote.busy || Boolean(remote.error)} onClick={() => beginPayment('cash')}><Banknote size={18} /> Tiền mặt</button><button className="pay-qr" type="button" disabled={!items.length || remote.busy || Boolean(remote.error)} onClick={() => beginPayment('qr')}><QrCode size={18} /> Thanh toán QR</button></div>
         <p className="qr-hint">{remote.remote ? 'QR chưa cấu hình; chỉ tiền mặt được ghi nhận trên server.' : 'QR được tạo qua webhook khi thiết bị online.'}</p>
       </aside>
 
+      {discountOpen && <DiscountDialog subtotal={subtotal} discount={discount} paidBefore={paidBefore} onApply={(amount) => { if (!remote.busy) setDiscount(amount) }} onClose={() => setDiscountOpen(false)} />}
       {payment && <PaymentDialog kind={payment} total={Math.max(0, total - paidBefore)} offline={offline} initialReceived={paidAmount} onClose={() => { if (!remote.busy) setPayment(null) }} onPay={pay} />}
       {paymentOptionsOpen && <PaymentOptions onClose={() => setPaymentOptionsOpen(false)} onSelect={(kind) => { setPaymentOptionsOpen(false); beginPayment(kind) }} />}
       {temporaryOpen && <DraftOrdersDialog remote={remote.remote} drafts={drafts} onClose={() => setTemporaryOpen(false)} onOpen={(id) => { void openOrder(id); setTemporaryOpen(false) }} />}
@@ -272,19 +275,19 @@ function NewCustomerDialog({ onClose, onSave, remote = false }: { remote?: boole
 
 function ProductCard({ product, onAdd }: { product: Product; onAdd: (product: Product) => void }) {
   const [optionsOpen, setOptionsOpen] = useState(false)
-  const attributeOptions = (product.attributes ?? []).flatMap((attribute) => attribute.value.split(',').map((value) => ({ name: attribute.name, value: value.trim() })).filter((option) => option.value))
+  const attributeOptions = expandAttributes(product.attributes ?? [])
   const hasOptions = attributeOptions.length > 0 || (product.units?.length ?? 0) > 0
   const selectOptions = (attributeValue?: { name: string; value: string }, unit?: NonNullable<Product['units']>[number]) => {
     const suffix = [attributeValue && `${attributeValue.name} ${attributeValue.value}`, unit?.name].filter(Boolean).join(' · ')
     const price = unit ? (Number(unit.price) > 0 ? Number(unit.price) : product.price * unit.ratio) : product.price
-    onAdd({ ...product, id: `${product.id}:${suffix || 'base'}`, name: suffix ? `${product.name} · ${suffix}` : product.name, sku: product.sku, price: price + (attributeValue ? (product.attributes?.find((a) => a.name === attributeValue.name && a.value.split(',').map((value) => value.trim()).includes(attributeValue.value))?.price_delta_vnd ?? 0) : 0), sourceId: product.sourceId ?? product.id, unitName: unit?.name, selectedAttributes: attributeValue ? [attributeValue] : [] })
+    onAdd({ ...product, id: `${product.id}:${suffix || 'base'}`, name: suffix ? `${product.name} · ${suffix}` : product.name, sku: product.sku, price: optionPrice({price}, attributeValue ? attributeOptions.find((option) => option.name === attributeValue.name && option.value === attributeValue.value) : undefined), sourceId: product.sourceId ?? product.id, unitName: unit?.name, selectedAttributes: attributeValue ? [{ name: attributeValue.name, value: attributeValue.value }] : [] })
     setOptionsOpen(false)
   }
   return <>
     <button className="product-card" type="button" onClick={() => hasOptions ? setOptionsOpen(true) : onAdd(product)} aria-label={`Thêm ${product.name} vào đơn hàng`}>
       <ProductArtwork product={product} /><div className="product-card-info"><strong>{product.name}</strong><span>{formatCurrency(product.price)}</span></div><span className="product-add"><Plus size={16} /></span>
     </button>
-    {optionsOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setOptionsOpen(false) }}><section className="modal-card product-options-dialog" role="dialog" aria-modal="true" aria-label={`Tùy chọn ${product.name}`}><button className="modal-close" type="button" aria-label="Đóng" onClick={() => setOptionsOpen(false)}><X size={18} /></button><h2>{product.name}</h2><p>Chọn thuộc tính hoặc đơn vị tính</p>{attributeOptions.map((option) => <button className="product-option-button" key={`${option.name}-${option.value}`} type="button" onClick={() => selectOptions(option)}>{option.name} {option.value}<strong>{formatCurrency(product.price)}</strong></button>)}{(product.units ?? []).map((unit) => <button className="product-option-button" key={unit.name} type="button" onClick={() => selectOptions(undefined, unit)}>{unit.name} <small>{unit.ratio} {product.baseUnit ?? 'đơn vị cơ bản'}</small><strong>{formatCurrency(Number(unit.price) > 0 ? Number(unit.price) : product.price * unit.ratio)}</strong></button>)}<button className="button button-secondary" type="button" onClick={() => selectOptions()}>{product.baseUnit ?? 'Đơn vị cơ bản'} · {formatCurrency(product.price)}</button></section></div>}
+    {optionsOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setOptionsOpen(false) }}><section className="modal-card product-options-dialog" role="dialog" aria-modal="true" aria-label={`Tùy chọn ${product.name}`}><button className="modal-close" type="button" aria-label="Đóng" onClick={() => setOptionsOpen(false)}><X size={18} /></button><h2>{product.name}</h2><p>Chọn thuộc tính hoặc đơn vị tính</p>{attributeOptions.map((option) => <button className="product-option-button" key={`${option.name}-${option.value}`} type="button" onClick={() => selectOptions(option)}>{option.name} {option.value}<strong>{formatCurrency(optionPrice(product, option))}</strong></button>)}{(product.units ?? []).map((unit) => <button className="product-option-button" key={unit.name} type="button" onClick={() => selectOptions(undefined, unit)}>{unit.name} <small>{unit.ratio} {product.baseUnit ?? 'đơn vị cơ bản'}</small><strong>{formatCurrency(Number(unit.price) > 0 ? Number(unit.price) : product.price * unit.ratio)}</strong></button>)}<button className="button button-secondary" type="button" onClick={() => selectOptions()}>{product.baseUnit ?? 'Đơn vị cơ bản'} · {formatCurrency(product.price)}</button></section></div>}
   </>
 }
 

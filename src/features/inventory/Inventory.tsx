@@ -1,20 +1,25 @@
-import { useMemo, useState } from 'react'
+import { ProductDetails } from '../../components/products/ProductDetails'
+import type { ManagementRow } from '../management/moduleConfig'
+import { Fragment, useMemo, useState } from 'react'
 import { ChevronDown, ChevronLeft, ChevronRight, ClipboardCheck, Download, MoreHorizontal, PackagePlus, Plus, Search, SlidersHorizontal, X } from 'lucide-react'
 import { formatCurrency, inventorySummary, products } from '../../services/mockData'
 import { ProductArtwork } from '../../components/ProductArtwork'
 import type { Product } from '../../types'
 
+type InventoryProduct = Product & { details?: ManagementRow }
+
 type InventoryProps = { stockCheck?: boolean }
 
 export function Inventory({ stockCheck = false }: InventoryProps) {
-  const catalog = useMemo(() => {
+  const catalog = useMemo<InventoryProduct[]>(() => {
     try {
       const saved: unknown = JSON.parse(localStorage.getItem('fnb-management:menu-items') ?? 'null')
-      if (Array.isArray(saved)) return saved.filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null && item.productType === 'Hàng hóa thường').map((item, index) => ({ id: String(item.code ?? index), sku: String(item.code ?? `M${index}`), name: String(item.name ?? 'Hàng hóa'), category: String(item.category ?? 'Khác'), price: Number(item.price ?? 0), stock: Number(item.stock ?? 0), minimum: Number(item.minimum ?? 0), color: '#e8edf5', image: String(item.image ?? '') }))
+      if (Array.isArray(saved)) return saved.filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null && item.productType === 'Hàng hóa thường').map((item, index) => ({ id: String(item.code ?? index), sku: String(item.code ?? `M${index}`), name: String(item.name ?? 'Hàng hóa'), category: String(item.category ?? 'Khác'), price: Number(item.price ?? 0), stock: Number(item.stock ?? 0), minimum: Number(item.minimum ?? 0), color: '#e8edf5', image: String(item.image ?? ''), details: {code:String(item.code ?? index),name:String(item.name ?? 'Hàng hóa'),productType:'Hàng hóa thường',menuType:String(item.menuType ?? 'Khác'),price:Number(item.price ?? 0),cost:item.cost == null ? '' : Number(item.cost),stock:Number(item.stock ?? 0),baseUnit:String(item.baseUnit ?? 'Cái'),visible:item.visible !== false,extra:item.extra === true,points:item.points !== false,attributes:typeof item.attributes === 'string' ? item.attributes : JSON.stringify(item.attributes ?? []),units:typeof item.units === 'string' ? item.units : JSON.stringify(item.units ?? [])} }))
     } catch { /* use bundled inventory data */ }
     return products.filter((product) => ['retail-01'].includes(product.id))
   }, [])
   const [rows, setRows] = useState(stockCheck ? [] : catalog)
+  const [expandedProduct, setExpandedProduct] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('Tất cả danh mục')
   const [stockFilter, setStockFilter] = useState('Tất cả trạng thái')
@@ -83,10 +88,10 @@ export function Inventory({ stockCheck = false }: InventoryProps) {
             <button className="icon-button filter-button" type="button" aria-label="Xóa bộ lọc" title="Xóa bộ lọc" onClick={() => { setCategory('Tất cả danh mục'); setStockFilter('Tất cả trạng thái') }}><SlidersHorizontal size={17} /></button>
           </div>
         </div>
-        <div className="table-scroll"><table className="data-table inventory-table"><thead><tr><th>Sản phẩm / SKU</th><th>Danh mục</th><th>Chi nhánh</th><th>Hiện tại</th><th>Định mức tối thiểu</th><th>Trạng thái</th><th aria-label="Thao tác" /></tr></thead><tbody>{filtered.map((product) => <tr key={product.id}>
+        <div className="table-scroll"><table className="data-table inventory-table"><thead><tr><th>Sản phẩm / SKU</th><th>Danh mục</th><th>Chi nhánh</th><th>Hiện tại</th><th>Định mức tối thiểu</th><th>Trạng thái</th><th aria-label="Thao tác" /></tr></thead><tbody>{filtered.map((product) => <Fragment key={product.id}><tr className="record-expandable-row" tabIndex={0} aria-expanded={expandedProduct === product.id} onClick={() => setExpandedProduct((current) => current === product.id ? null : product.id)} onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); setExpandedProduct((current) => current === product.id ? null : product.id) } }}>
           <td><div className="product-cell"><ProductArtwork product={product} compact /><span><strong>{product.name}</strong><small>{product.sku}</small></span></div></td>
-          <td className="inventory-category">{product.category === 'Retail SKU' ? 'Thành phẩm' : 'Nguyên liệu'}</td><td className="inventory-branch">Mộc Store</td><td data-label="Hiện tại"><strong className="stock-number">{product.stock} {product.id === 'tea-01' ? 'l' : product.id === 'retail-01' ? 'cái' : 'kg'}</strong></td><td data-label="Định mức tối thiểu">{product.minimum} {product.id === 'retail-01' ? 'cái' : 'kg'}</td><td data-label="Trạng thái"><span className={`status-badge ${product.stock <= product.minimum ? 'low' : 'in-stock'}`}><i />{product.stock <= product.minimum ? 'Sắp hết' : 'Đang tốt'}</span></td><td className="inventory-actions"><button className="row-menu" type="button" aria-label={`Thao tác ${product.name}`} onClick={() => { setSelected(product); setDialog('adjust') }}><MoreHorizontal size={18} /></button></td>
-        </tr>)}</tbody></table></div>
+          <td className="inventory-category">{product.category === 'Retail SKU' ? 'Thành phẩm' : 'Nguyên liệu'}</td><td className="inventory-branch">Mộc Store</td><td data-label="Hiện tại"><strong className="stock-number">{product.stock} {product.id === 'tea-01' ? 'l' : product.id === 'retail-01' ? 'cái' : 'kg'}</strong></td><td data-label="Định mức tối thiểu">{product.minimum} {product.id === 'retail-01' ? 'cái' : 'kg'}</td><td data-label="Trạng thái"><span className={`status-badge ${product.stock <= product.minimum ? 'low' : 'in-stock'}`}><i />{product.stock <= product.minimum ? 'Sắp hết' : 'Đang tốt'}</span></td><td className="inventory-actions"><button className="row-menu" type="button" aria-label={`Thao tác ${product.name}`} onClick={(event) => { event.stopPropagation(); setSelected(product); setDialog('adjust') }}><MoreHorizontal size={18} /></button></td>
+        </tr>{expandedProduct === product.id && <tr className="record-detail-row"><td colSpan={7}><div className="record-detail-content product-detail-grid"><ProductDetails product={{...product.details,code:product.sku,name:product.name,productType:'Hàng hóa thường',price:product.price,stock:product.stock}} /></div></td></tr>}</Fragment>)}</tbody></table></div>
         {filtered.length === 0 && <div className="empty-state"><Search size={24} /><strong>Không tìm thấy sản phẩm</strong><span>Thử thay đổi từ khóa hoặc bộ lọc.</span></div>}
         <div className="table-footer"><span>Hiển thị <strong>{filtered.length ? 1 : 0}–{filtered.length}</strong> trong <strong>{filtered.length}</strong> sản phẩm</span><div className="pagination"><button type="button" aria-label="Trang trước" disabled><ChevronLeft size={16} /></button><button className="current-page" type="button">1</button><button type="button" aria-label="Trang sau" disabled><ChevronRight size={16} /></button></div></div>
       </section>
