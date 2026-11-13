@@ -34,7 +34,7 @@ export function usePosController() {
       allPages((page) => menuItemsRepository.list({ page, page_size: 100, availability: 'available' }, signal)),
       allPages((page) => customersRepository.list({ page, page_size: 100 }, signal)),
     ])
-    return { products: products.filter((p) => p.is_visible).map((p): Product => ({ id: p.id, sourceId: p.id, name: p.name, sku: p.sku, category: p.category_name ?? 'Khác', price: p.price_vnd, stock: 0, minimum: 0, color: '#eef2f7', image: p.image_url ?? undefined, baseUnit: p.base_unit, productType: p.product_type === 'goods' ? 'Hàng hóa thường' : 'Chế biến', attributes: p.attributes, units: p.units.map((u) => ({ name: u.name, ratio: Number(u.ratio), price: u.price_vnd, cost: u.cost_vnd ?? undefined })) })), customers }
+    return { products: products.filter((p) => p.is_visible || p.units.some((unit) => unit.is_visible !== false)).map((p): Product => ({ id: p.id, sourceId: p.id, name: p.name, sku: p.sku, category: p.category_name ?? 'Khác', price: p.price_vnd, stock: 0, minimum: 0, color: '#eef2f7', image: p.image_url ?? undefined, baseUnit: p.base_unit, baseVisible: p.is_visible, productType: p.product_type === 'goods' ? 'Hàng hóa thường' : 'Chế biến', attributes: p.attributes, units: p.units.map((u) => ({ name: u.name, ratio: Number(u.ratio), price: u.price_vnd, cost: u.cost_vnd ?? undefined, visible: u.is_visible !== false })) })), customers }
   } })
   const rooms = useQuery({ queryKey: ['api', key, 'rooms'], enabled: remote && !!session, queryFn: ({ signal }) => roomsRepository.list(signal), refetchInterval: 15_000 })
   const orders = useQuery({ queryKey: ['api', key, 'pos-orders'], enabled: remote && !!session, queryFn: async ({ signal }) => {

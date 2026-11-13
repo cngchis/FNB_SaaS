@@ -15,10 +15,11 @@ type AttributeInput struct {
 	PriceDeltaVND int64  `json:"price_delta_vnd" binding:"min=-9007199254740991,max=9007199254740991"`
 }
 type UnitInput struct {
-	Name     string `json:"name" binding:"required,max=80"`
-	Ratio    string `json:"ratio" binding:"required"`
-	PriceVND *int64 `json:"price_vnd" binding:"required,min=0,max=9007199254740991"`
-	CostVND  *int64 `json:"cost_vnd" binding:"omitempty,min=0,max=9007199254740991"`
+	IsVisible *bool  `json:"is_visible"`
+	Name      string `json:"name" binding:"required,max=80"`
+	Ratio     string `json:"ratio" binding:"required"`
+	PriceVND  *int64 `json:"price_vnd" binding:"required,min=0,max=9007199254740991"`
+	CostVND   *int64 `json:"cost_vnd" binding:"omitempty,min=0,max=9007199254740991"`
 }
 type Input struct {
 	Name         string           `json:"name" binding:"required,max=200"`

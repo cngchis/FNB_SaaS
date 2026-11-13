@@ -1,5 +1,7 @@
 # Tiến độ tích hợp frontend với API
 
+> **Đơn vị tính 14/11:** thêm hiển thị thực đơn riêng theo đơn vị và dropdown chi tiết kho. Cần migration 6; tồn kho/kiểm kho vẫn demo, chưa tự xuất kho POS. Xem [tiến độ đơn vị](./product-units-progress-vi.md).
+
 > **Nhập hàng 14/11:** đã nối workspace API trên desktop, lưu nháp/mở lại/xác nhận nhập kho và retry chống trùng. Mobile đang chờ ngoại lệ UI FREEZE vì CSS cũ ẩn nút; chưa coi là hoàn tất. Xem [tiến độ workspace nhập hàng](./purchase-workspace-api-progress-vi.md).
 
 > **Nhập kho 13/11:** đã có backend migration 5 và CRUD Nhà cung cấp; giao diện Phiếu nhập chờ duyệt ngoại lệ UI. Xem [tiến độ nhập kho](./purchasing-stock-progress-vi.md).

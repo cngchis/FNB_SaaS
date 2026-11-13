@@ -144,7 +144,7 @@ func (s Service) Save(ctx context.Context, tenant string, id pgtype.UUID, in Inp
 			}
 		}
 		for _, u := range in.Units {
-			if err = q.CreateProductUnit(ctx, dbgen.CreateProductUnitParams{TenantID: tid, ProductID: p.ID, Name: u.Name, Ratio: u.Ratio, PriceVnd: *u.PriceVND, CostVnd: httpx.NullableInt(u.CostVND)}); err != nil {
+			if err = q.CreateProductUnit(ctx, dbgen.CreateProductUnitParams{TenantID: tid, ProductID: p.ID, Name: u.Name, Ratio: u.Ratio, PriceVnd: *u.PriceVND, CostVnd: httpx.NullableInt(u.CostVND), IsVisible: httpx.Bool(u.IsVisible, httpx.Bool(in.IsVisible, true))}); err != nil {
 				return err
 			}
 		}

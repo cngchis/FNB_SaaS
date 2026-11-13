@@ -1009,3 +1009,9 @@ button.mobile-cart-handle { padding: 0; border: 0; cursor: pointer; }
 }
 
 .attribute-price-field { display: grid; gap: 4px; font-size: 10px; }
+
+/* Unit-specific controls requested for product variants. */
+.product-detail-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; grid-column: 1 / -1; }
+.product-detail-heading select { max-width: 100%; min-height: 32px; padding: 4px 10px; border: 1px solid var(--border, #e2e8ed); border-radius: 7px; color: inherit; background: var(--surface, #fff); font: inherit; }
+.unit-editor-row .unit-menu-visibility { grid-column: 1 / -1; display: flex; align-items: center; gap: 7px; }
+.unit-editor-row .unit-menu-visibility input { width: 15px; height: 15px; min-height: 0; margin: 0; accent-color: var(--accent-blue); }

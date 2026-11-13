@@ -182,7 +182,7 @@ func (q *Queries) CreateProductCategory(ctx context.Context, arg CreateProductCa
 }
 
 const createProductUnit = `-- name: CreateProductUnit :exec
-INSERT INTO product_units (tenant_id, product_id, name, ratio, price_vnd, cost_vnd) VALUES ($1,$2,$3,$4,$5,$6)
+INSERT INTO product_units (tenant_id, product_id, name, ratio, price_vnd, cost_vnd, is_visible) VALUES ($1,$2,$3,$4,$5,$6,$7)
 `
 
 type CreateProductUnitParams struct {
@@ -192,6 +192,7 @@ type CreateProductUnitParams struct {
 	Ratio     string      `json:"ratio"`
 	PriceVnd  int64       `json:"price_vnd"`
 	CostVnd   pgtype.Int8 `json:"cost_vnd"`
+	IsVisible bool        `json:"is_visible"`
 }
 
 func (q *Queries) CreateProductUnit(ctx context.Context, arg CreateProductUnitParams) error {
@@ -202,6 +203,7 @@ func (q *Queries) CreateProductUnit(ctx context.Context, arg CreateProductUnitPa
 		arg.Ratio,
 		arg.PriceVnd,
 		arg.CostVnd,
+		arg.IsVisible,
 	)
 	return err
 }
@@ -384,7 +386,7 @@ func (q *Queries) ListProductCategories(ctx context.Context, tenantID pgtype.UUI
 }
 
 const listProductUnits = `-- name: ListProductUnits :many
-SELECT id, tenant_id, product_id, name, ratio, price_vnd, cost_vnd, created_at, updated_at FROM product_units WHERE tenant_id = $1 AND product_id = ANY($2::uuid[]) ORDER BY name
+SELECT id, tenant_id, product_id, name, ratio, price_vnd, cost_vnd, created_at, updated_at, is_visible FROM product_units WHERE tenant_id = $1 AND product_id = ANY($2::uuid[]) ORDER BY name
 `
 
 type ListProductUnitsParams struct {
@@ -411,6 +413,7 @@ func (q *Queries) ListProductUnits(ctx context.Context, arg ListProductUnitsPara
 			&i.CostVnd,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.IsVisible,
 		); err != nil {
 			return nil, err
 		}

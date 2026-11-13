@@ -82,4 +82,4 @@ DELETE FROM product_units WHERE tenant_id = $1 AND product_id = $2;
 INSERT INTO product_variants (tenant_id, product_id, name, value, price_delta_vnd) VALUES ($1,$2,$3,$4,$5);
 
 -- name: CreateProductUnit :exec
-INSERT INTO product_units (tenant_id, product_id, name, ratio, price_vnd, cost_vnd) VALUES ($1,$2,$3,$4,$5,$6);
+INSERT INTO product_units (tenant_id, product_id, name, ratio, price_vnd, cost_vnd, is_visible) VALUES ($1,$2,$3,$4,$5,$6,$7);

@@ -275,6 +275,7 @@ type ProductUnit struct {
 	CostVnd   pgtype.Int8        `json:"cost_vnd"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	IsVisible bool               `json:"is_visible"`
 }
 
 type ProductVariant struct {

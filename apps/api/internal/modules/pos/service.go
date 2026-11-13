@@ -120,6 +120,19 @@ func complete(ctx context.Context, tx pgx.Tx, who auth.Identity, operation, key 
 	return err
 }
 
+// Existing order lines retain snapshots; increasing them requires a saleable unit.
+func checkUnitSale(ctx context.Context, tx pgx.Tx, who auth.Identity, in LineInput) error {
+	var saleable bool
+	err := tx.QueryRow(ctx, `SELECT p.availability='available' AND CASE WHEN $3='' OR $3=p.base_unit THEN p.is_visible ELSE COALESCE((SELECT u.is_visible FROM product_units u WHERE u.tenant_id=p.tenant_id AND u.product_id=p.id AND u.name=$3),false) END FROM products p WHERE p.tenant_id=$1 AND p.id=$2 AND p.deleted_at IS NULL FOR SHARE`, who.TenantID, in.ProductID, in.Unit).Scan(&saleable)
+	if err != nil {
+		return err
+	}
+	if !saleable {
+		return httpx.Invalid("Product unit is not available for sale.")
+	}
+	return nil
+}
+
 func priceLine(ctx context.Context, tx pgx.Tx, who auth.Identity, in LineInput, old map[string]Line) (Line, error) {
 	sort.Slice(in.Attributes, func(i, j int) bool { return in.Attributes[i].Name < in.Attributes[j].Name })
 	if in.Attributes == nil {
@@ -133,6 +146,11 @@ func priceLine(ctx context.Context, tx pgx.Tx, who auth.Identity, in LineInput, 
 	sum := sha256.Sum256(canonical)
 	line := Line{LineInput: in, Key: hex.EncodeToString(sum[:])}
 	if prior, ok := old[line.Key]; ok {
+		if in.Quantity > prior.Quantity {
+			if err := checkUnitSale(ctx, tx, who, in); err != nil {
+				return line, err
+			}
+		}
 		line.Name = prior.Name
 		line.SKU = prior.SKU
 		line.Price = prior.Price
@@ -148,11 +166,11 @@ func priceLine(ctx context.Context, tx pgx.Tx, who auth.Identity, in LineInput, 
 	if err != nil {
 		return line, err
 	}
-	if !visible || available != "available" {
+	if available != "available" {
 		return line, httpx.Invalid("Product is not available for sale.")
 	}
 	if in.Unit != "" && in.Unit != base {
-		err = tx.QueryRow(ctx, `SELECT price_vnd,cost_vnd FROM product_units WHERE tenant_id=$1 AND product_id=$2 AND name=$3`, who.TenantID, in.ProductID, in.Unit).Scan(&line.Price, &line.Cost)
+		err = tx.QueryRow(ctx, `SELECT price_vnd,cost_vnd,is_visible FROM product_units WHERE tenant_id=$1 AND product_id=$2 AND name=$3`, who.TenantID, in.ProductID, in.Unit).Scan(&line.Price, &line.Cost, &visible)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return line, httpx.Invalid("Choose a valid product unit.")
@@ -160,6 +178,9 @@ func priceLine(ctx context.Context, tx pgx.Tx, who auth.Identity, in LineInput, 
 			return line, err
 		}
 		line.Name += " · " + in.Unit
+	}
+	if !visible {
+		return line, httpx.Invalid("Product unit is not available for sale.")
 	}
 	seen := map[string]bool{}
 	for _, a := range in.Attributes {

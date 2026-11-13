@@ -4,7 +4,7 @@ import { request } from './auth'
 const money = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
 const id = z.uuid()
 const attribute = z.object({ name: z.string(), value: z.string(), price_delta_vnd: z.number().int() })
-const unit = z.object({ name: z.string(), ratio: z.string(), price_vnd: money, cost_vnd: money.nullable() })
+const unit = z.object({ name: z.string(), ratio: z.string(), price_vnd: money, cost_vnd: money.nullable(), is_visible: z.boolean().optional() })
 export const productSchema = z.object({
   id, sku: z.string(), name: z.string(), category_id: id.nullable(), category_name: z.string().nullable(),
   product_type: z.enum(['goods', 'prepared']), menu_type: z.enum(['drink', 'food', 'other']), base_unit: z.string(),

@@ -128,3 +128,9 @@ FREEZE. See [ADR-008](../../docs/ADR-008-purchasing-stock-ledger.md) and the
 [Vietnamese progress report](../../docs/purchasing-stock-progress-vi.md) for scope,
 API endpoints and rollout commands. Never run down migrations against real receipt
 history; rollback is exercised only in isolated test databases.
+
+### Unit menu visibility (migration 6)
+
+Migration `00006_unit_menu_visibility.sql` adds independent menu visibility for converted units. `products.is_visible` controls the base unit; `product_units.is_visible` controls each converted unit. Existing units inherit their product visibility during migration; omitted visibility in legacy requests also inherits the base-unit flag. Product availability still applies to all units. Apply migrations with the admin connection and restart the API before using the updated frontend.
+
+POS rejects new lines and quantity increases for hidden units. Existing recorded lines retain their snapshots and can still be paid. This change does not implement stock deduction, purchasing in converted units, or separate SKU identities. See [ADR-009](../../docs/ADR-009-unit-menu-visibility.md) and [rollout instructions](../../docs/product-units-progress-vi.md).

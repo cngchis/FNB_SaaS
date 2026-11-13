@@ -13,7 +13,7 @@ export function productRow(item: ProductDTO): ManagementRow {
     status: item.availability === 'available' ? 'Đang bán' : 'Tạm hết',
     visible: item.is_visible, extra: item.is_extra, points: item.earns_points, image: item.image_url ?? '',
     attributes: JSON.stringify(item.attributes),
-    units: JSON.stringify(item.units.map((unit) => ({ name: unit.name, ratio: Number(unit.ratio), price: unit.price_vnd, cost: unit.cost_vnd ?? 0, _costWasUnset: unit.cost_vnd === null }))),
+    units: JSON.stringify(item.units.map((unit) => ({ name: unit.name, ratio: Number(unit.ratio), price: unit.price_vnd, cost: unit.cost_vnd ?? 0, visible: unit.is_visible ?? item.is_visible, _costWasUnset: unit.cost_vnd === null }))),
     _tracksStock: item.tracks_stock,
   }
 }
@@ -34,7 +34,7 @@ export function productInput(row: ManagementRow, categories: { id: string; name:
   const image = String(row.image ?? '')
   if (image.startsWith('data:')) throw new Error('Upload ảnh chưa được hỗ trợ trong chế độ API.')
   const attributes = list(row.attributes, z.object({ name: z.string().trim().min(1), value: z.string().trim().min(1), price_delta_vnd: z.number().int().default(0) }))
-  const units = list(row.units, z.object({ name: z.string().trim().min(1), ratio: z.coerce.number().positive(), price: amount, cost: amount.optional(), _costWasUnset: z.boolean().optional() }))
+  const units = list(row.units, z.object({ name: z.string().trim().min(1), ratio: z.coerce.number().positive(), price: amount, cost: amount.optional(), visible: z.boolean().optional(), _costWasUnset: z.boolean().optional() }))
   return {
     name: String(row.name).trim(), category_id: category?.id ?? null,
     product_type: prepared ? 'prepared' : 'goods',
@@ -43,7 +43,7 @@ export function productInput(row: ManagementRow, categories: { id: string; name:
     tracks_stock: prepared ? false : row._tracksStock !== false,
     is_visible: row.visible === true, is_extra: row.extra === true, earns_points: row.points === true,
     availability: row.status === 'Tạm hết' ? 'unavailable' : 'available', image_url: image || null,
-    attributes, units: units.map((unit) => ({ name: unit.name, ratio: String(unit.ratio), price_vnd: unit.price, cost_vnd: prepared || unit._costWasUnset ? null : unit.cost ?? null })),
+    attributes, units: units.map((unit) => ({ name: unit.name, ratio: String(unit.ratio), price_vnd: unit.price, is_visible: unit.visible ?? (row.visible === true), cost_vnd: prepared || unit._costWasUnset ? null : unit.cost ?? null })),
   }
 }
 export function customerInput(row: ManagementRow, groups: GroupDTO[], canAdjustPoints: boolean): CustomerInput {

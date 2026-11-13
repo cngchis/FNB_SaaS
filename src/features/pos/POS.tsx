@@ -23,11 +23,11 @@ function loadCatalogProducts(): Product[] {
     const saved: unknown = JSON.parse(prototypeStorage.getItem('fnb-management:menu-items') ?? 'null')
     if (!Array.isArray(saved) || saved.length === 0) return products
     return saved.filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null)
-      .filter((item) => item.visible !== false && item.status !== 'Tạm hết')
+      .filter((item) => (item.visible !== false || parseCatalogRows<{visible?:boolean}>(item.units).some((unit) => unit.visible === true)) && item.status !== 'Tạm hết')
       .map((item, index) => {
         const category = String(item.category ?? 'Khác')
         const code = String(item.code ?? `M${String(index + 1).padStart(5, '0')}`)
-        return { id: code, sku: code, name: String(item.name ?? 'Sản phẩm'), category, price: Number(item.price) || 0, stock: Number(item.stock) || 0, minimum: Number(item.minimum) || 0, color: categoryColors[category] ?? '#eef2f7', image: typeof item.image === 'string' ? item.image : undefined, baseUnit: String(item.baseUnit ?? 'Cái'), productType: String(item.productType ?? 'Chế biến') as Product['productType'], attributes: parseCatalogRows(item.attributes), units: parseCatalogRows(item.units) }
+        return { id: code, sku: code, name: String(item.name ?? 'Sản phẩm'), category, price: Number(item.price) || 0, stock: Number(item.stock) || 0, minimum: Number(item.minimum) || 0, color: categoryColors[category] ?? '#eef2f7', image: typeof item.image === 'string' ? item.image : undefined, baseUnit: String(item.baseUnit ?? 'Cái'), baseVisible: item.visible !== false, productType: String(item.productType ?? 'Chế biến') as Product['productType'], attributes: parseCatalogRows(item.attributes), units: parseCatalogRows<NonNullable<Product['units']>[number]>(item.units).map((unit) => ({...unit, visible: unit.visible ?? (item.visible !== false)})) }
       })
   } catch { return products }
 }
@@ -276,18 +276,21 @@ function NewCustomerDialog({ onClose, onSave, remote = false }: { remote?: boole
 function ProductCard({ product, onAdd }: { product: Product; onAdd: (product: Product) => void }) {
   const [optionsOpen, setOptionsOpen] = useState(false)
   const attributeOptions = expandAttributes(product.attributes ?? [])
-  const hasOptions = attributeOptions.length > 0 || (product.units?.length ?? 0) > 0
+  const saleUnits = (product.units ?? []).filter((unit) => unit.visible !== false)
+  const hasOptions = attributeOptions.length > 0 || saleUnits.length > 0
+  const cardPrice = product.baseVisible === false ? saleUnits[0]?.price ?? product.price : product.price
   const selectOptions = (attributeValue?: { name: string; value: string }, unit?: NonNullable<Product['units']>[number]) => {
+    if (unit ? unit.visible === false : product.baseVisible === false) return
     const suffix = [attributeValue && `${attributeValue.name} ${attributeValue.value}`, unit?.name].filter(Boolean).join(' · ')
-    const price = unit ? (Number(unit.price) > 0 ? Number(unit.price) : product.price * unit.ratio) : product.price
+    const price = unit ? (unit.price ?? product.price * unit.ratio) : product.price
     onAdd({ ...product, id: `${product.id}:${suffix || 'base'}`, name: suffix ? `${product.name} · ${suffix}` : product.name, sku: product.sku, price: optionPrice({price}, attributeValue ? attributeOptions.find((option) => option.name === attributeValue.name && option.value === attributeValue.value) : undefined), sourceId: product.sourceId ?? product.id, unitName: unit?.name, selectedAttributes: attributeValue ? [{ name: attributeValue.name, value: attributeValue.value }] : [] })
     setOptionsOpen(false)
   }
   return <>
     <button className="product-card" type="button" onClick={() => hasOptions ? setOptionsOpen(true) : onAdd(product)} aria-label={`Thêm ${product.name} vào đơn hàng`}>
-      <ProductArtwork product={product} /><div className="product-card-info"><strong>{product.name}</strong><span>{formatCurrency(product.price)}</span></div><span className="product-add"><Plus size={16} /></span>
+      <ProductArtwork product={product} /><div className="product-card-info"><strong>{product.name}</strong><span>{formatCurrency(cardPrice)}</span></div><span className="product-add"><Plus size={16} /></span>
     </button>
-    {optionsOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setOptionsOpen(false) }}><section className="modal-card product-options-dialog" role="dialog" aria-modal="true" aria-label={`Tùy chọn ${product.name}`}><button className="modal-close" type="button" aria-label="Đóng" onClick={() => setOptionsOpen(false)}><X size={18} /></button><h2>{product.name}</h2><p>Chọn thuộc tính hoặc đơn vị tính</p>{attributeOptions.map((option) => <button className="product-option-button" key={`${option.name}-${option.value}`} type="button" onClick={() => selectOptions(option)}>{option.name} {option.value}<strong>{formatCurrency(optionPrice(product, option))}</strong></button>)}{(product.units ?? []).map((unit) => <button className="product-option-button" key={unit.name} type="button" onClick={() => selectOptions(undefined, unit)}>{unit.name} <small>{unit.ratio} {product.baseUnit ?? 'đơn vị cơ bản'}</small><strong>{formatCurrency(Number(unit.price) > 0 ? Number(unit.price) : product.price * unit.ratio)}</strong></button>)}<button className="button button-secondary" type="button" onClick={() => selectOptions()}>{product.baseUnit ?? 'Đơn vị cơ bản'} · {formatCurrency(product.price)}</button></section></div>}
+    {optionsOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setOptionsOpen(false) }}><section className="modal-card product-options-dialog" role="dialog" aria-modal="true" aria-label={`Tùy chọn ${product.name}`}><button className="modal-close" type="button" aria-label="Đóng" onClick={() => setOptionsOpen(false)}><X size={18} /></button><h2>{product.name}</h2><p>Chọn thuộc tính hoặc đơn vị tính</p>{product.baseVisible !== false && attributeOptions.map((option) => <button className="product-option-button" key={`${option.name}-${option.value}`} type="button" onClick={() => selectOptions(option)}>{option.name} {option.value}<strong>{formatCurrency(optionPrice(product, option))}</strong></button>)}{saleUnits.map((unit) => <button className="product-option-button" key={unit.name} type="button" onClick={() => selectOptions(undefined, unit)}>{unit.name} <small>{unit.ratio} {product.baseUnit ?? 'đơn vị cơ bản'}</small><strong>{formatCurrency(unit.price ?? product.price * unit.ratio)}</strong></button>)}{product.baseVisible !== false && <button className="button button-secondary" type="button" onClick={() => selectOptions()}>{product.baseUnit ?? 'Đơn vị cơ bản'} · {formatCurrency(product.price)}</button>}</section></div>}
   </>
 }
 

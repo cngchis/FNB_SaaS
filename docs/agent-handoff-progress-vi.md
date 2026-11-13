@@ -1,5 +1,7 @@
 # Báo cáo tiến độ và bàn giao cho agent tiếp theo
 
+> **Đơn vị tính 14/11:** thêm hiển thị thực đơn riêng theo đơn vị và dropdown chi tiết kho. Cần migration 6; tồn kho/kiểm kho vẫn demo, chưa tự xuất kho POS. Xem [tiến độ đơn vị](./product-units-progress-vi.md).
+
 > **Nhập hàng 14/11:** đã nối workspace API trên desktop, lưu nháp/mở lại/xác nhận nhập kho và retry chống trùng. Mobile đang chờ ngoại lệ UI FREEZE vì CSS cũ ẩn nút; chưa coi là hoàn tất. Xem [tiến độ workspace nhập hàng](./purchase-workspace-api-progress-vi.md).
 
 > **UI 13/11:** đã thêm giá từng lựa chọn thuộc tính, detail hàng hóa và popup giảm giá; cart chỉ hiển thị tiền đã ghi nhận. Xem [tiến độ UI món/cart](./product-cart-ui-progress-vi.md).

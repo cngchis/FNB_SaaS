@@ -20,7 +20,7 @@ it('round-trips product data while separating UUID, SKU and unavailable stock', 
   expect(input).not.toHaveProperty('tenant_id')
   expect(input.tracks_stock).toBe(false)
   expect(input.attributes[0].price_delta_vnd).toBe(5000)
-  expect(input.units[0]).toEqual({ name: 'Thùng', ratio: '24', price_vnd: 700000, cost_vnd: 384000 })
+  expect(input.units[0]).toEqual({ name: 'Thùng', ratio: '24', price_vnd: 700000, cost_vnd: 384000, is_visible: true })
 })
 it('removes manual costs and product stock tracking for prepared items', () => {
   const input = productInput({ ...productRow(product), productType: 'Chế biến' }, [{ id, name: 'Bia' }])
@@ -44,4 +44,14 @@ it('does not send computed customer metrics or cashier point adjustments', () =>
   expect(input).not.toHaveProperty('points')
   expect(input).not.toHaveProperty('spent')
   expect(input).not.toHaveProperty('orders')
+})
+
+it('round-trips independent menu visibility for each unit', () => {
+ const row=productRow({...product, is_visible:true, units:[{...product.units[0],is_visible:false}]})
+ expect(productInput(row,[{id,name:'Bia'}]).units[0].is_visible).toBe(false)
+ expect(productInput(row,[{id,name:'Bia'}]).is_visible).toBe(true)
+})
+it('keeps legacy units hidden when their base product was hidden', () => {
+ const row=productRow({...product,is_visible:false})
+ expect(productInput(row,[{id,name:'Bia'}]).units[0].is_visible).toBe(false)
 })
