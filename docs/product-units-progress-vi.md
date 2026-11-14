@@ -1,5 +1,7 @@
 # Tiến độ đơn vị tính và hiển thị thực đơn
 
+> **Cập nhật tiếp theo:** danh mục Quản lý hàng hóa đã nối API, tồn kho vẫn chưa xác định và Kiểm kho còn demo. Xem [tiến độ hàng hóa API](./inventory-catalog-api-progress-vi.md); mô tả inventory demo bên dưới phản ánh thời điểm trước bước này.
+
 Ngày: 14/11/2026.
 
 ## Đã làm

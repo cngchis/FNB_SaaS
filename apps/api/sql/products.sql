@@ -26,6 +26,7 @@ WHERE p.tenant_id = sqlc.arg(tenant_id) AND p.deleted_at IS NULL
 AND (p.name ILIKE sqlc.arg(search) OR p.sku ILIKE sqlc.arg(search))
 AND (sqlc.narg(category_id)::uuid IS NULL OR p.category_id = sqlc.narg(category_id))
 AND (sqlc.arg(product_type)::text = '' OR p.product_type = sqlc.arg(product_type))
+AND (sqlc.narg(tracks_stock)::boolean IS NULL OR p.tracks_stock = sqlc.narg(tracks_stock))
 AND (sqlc.arg(availability)::text = '' OR p.availability = sqlc.arg(availability));
 
 -- name: ListProducts :many
@@ -35,6 +36,7 @@ WHERE p.tenant_id = sqlc.arg(tenant_id) AND p.deleted_at IS NULL
 AND (p.name ILIKE sqlc.arg(search) OR p.sku ILIKE sqlc.arg(search))
 AND (sqlc.narg(category_id)::uuid IS NULL OR p.category_id = sqlc.narg(category_id))
 AND (sqlc.arg(product_type)::text = '' OR p.product_type = sqlc.arg(product_type))
+AND (sqlc.narg(tracks_stock)::boolean IS NULL OR p.tracks_stock = sqlc.narg(tracks_stock))
 AND (sqlc.arg(availability)::text = '' OR p.availability = sqlc.arg(availability))
 ORDER BY
 CASE WHEN sqlc.arg(sort)::text = 'name' AND sqlc.arg(direction)::text = 'asc' THEN p.name END ASC,

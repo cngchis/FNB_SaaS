@@ -1,5 +1,7 @@
 # Tiến độ tích hợp frontend với API
 
+> **Hàng hóa API 14/11:** danh mục/tìm/lọc/phân trang/sửa đã dùng product UUID thật. Tồn kho chưa xác định (`—`), Kiểm kho vẫn demo; mobile trên 6 dòng chờ duyệt CSS. Xem [tiến độ hàng hóa API](./inventory-catalog-api-progress-vi.md). Những đoạn ghi inventory demo bên dưới là lịch sử.
+
 > **Đơn vị tính 14/11:** thêm hiển thị thực đơn riêng theo đơn vị và dropdown chi tiết kho. Cần migration 6; tồn kho/kiểm kho vẫn demo, chưa tự xuất kho POS. Xem [tiến độ đơn vị](./product-units-progress-vi.md).
 
 > **Nhập hàng 14/11:** đã nối workspace API trên desktop, lưu nháp/mở lại/xác nhận nhập kho và retry chống trùng. Mobile đang chờ ngoại lệ UI FREEZE vì CSS cũ ẩn nút; chưa coi là hoàn tất. Xem [tiến độ workspace nhập hàng](./purchase-workspace-api-progress-vi.md).

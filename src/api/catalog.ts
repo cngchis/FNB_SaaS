@@ -33,7 +33,7 @@ export type GroupDTO = z.infer<typeof groupListSchema>
 export type ProductInput = Omit<ProductDTO, 'id' | 'sku' | 'category_name'>
 export type CustomerInput = Omit<z.infer<typeof customerSchema>, 'id' | 'points'> & { points?: number }
 export type GroupInput = Omit<z.infer<typeof groupSchema>, 'id'>
-export type ListOptions = { page?: number; page_size?: number; search?: string; sort?: string; direction?: 'asc' | 'desc'; category_id?: string; group_id?: string; product_type?: 'goods' | 'prepared'; availability?: 'available' | 'unavailable' }
+export type ListOptions = { tracks_stock?: boolean; page?: number; page_size?: number; search?: string; sort?: string; direction?: 'asc' | 'desc'; category_id?: string; group_id?: string; product_type?: 'goods' | 'prepared'; availability?: 'available' | 'unavailable' }
 
 function query(options: ListOptions) {
   const values = new URLSearchParams()

@@ -893,7 +893,7 @@ test('inventory create action saves a real product searchable in purchases', asy
  await expect(page.locator('.inventory-table tbody')).toContainText('Lon')
 })
 
-test('inventory detail editor modifies prototype data without overwriting an API product with the same SKU', async ({ page, request }, info) => {
+test('inventory detail editor uses the API identity and ignores prototype data with the same SKU', async ({ page, request }, info) => {
  test.skip(!tenant || !email || !password, 'Use the isolated PostgreSQL fixture.')
  const auth = await request.post(`${base}/api/v1/auth/login`, { data: { tenant_slug: tenant, email, password } })
  const { data: session } = await auth.json()
@@ -904,18 +904,22 @@ test('inventory detail editor modifies prototype data without overwriting an API
  const demo = { code: real.sku, name: `Bia demo ${info.project.name}`, category: 'Bia', productType: 'Hàng hóa thường', price: 18000, cost: 12000, stock: 24, baseUnit: 'Lon', attributes: '[]', units: '[]' }
  await page.addInitScript((product) => localStorage.setItem('fnb-management:menu-items', JSON.stringify([product])), demo)
  await signIn(page, '/management/inventory')
- await page.getByRole('button', { name: `Thao tác ${demo.name}`, exact: true }).click()
+ await page.getByPlaceholder('Tìm theo tên, SKU, barcode...').fill(real.name)
+ await expect(page.locator('.inventory-table tbody')).not.toContainText(demo.name)
+ await page.getByRole('button', { name: `Thao tác ${real.name}`, exact: true }).click()
  const dialog = page.getByRole('dialog', { name: 'Cập nhật sản phẩm', exact: true })
- await expect(dialog.getByText('Thông tin được lưu trong dữ liệu demo trên thiết bị.', { exact: true })).toBeVisible()
- await dialog.getByLabel('Tên hàng', { exact: true }).fill('Bia demo đã sửa')
+ await expect(dialog.getByText('Thông tin được lưu trên hệ thống cửa hàng.', { exact: true })).toBeVisible()
+ await dialog.getByLabel('Tên hàng', { exact: true }).fill(`${real.name} đã sửa`)
  await dialog.getByLabel('Giá bán (₫)', { exact: true }).fill('20000')
  await dialog.getByRole('button', { name: 'Lưu món', exact: true }).click()
  await expect(dialog).toHaveCount(0)
- await expect(page.locator('.inventory-table tbody')).toContainText('Bia demo đã sửa')
+ await expect(page.locator('.inventory-table tbody')).toContainText(`${real.name} đã sửa`)
  const fetched = await request.get(`${base}/api/v1/products/${real.id}`, { headers })
  const { data: unchanged } = await fetched.json()
- expect(unchanged.name).toBe(real.name)
- expect(unchanged.price_vnd).toBe(22000)
+ expect(unchanged.name).toBe(`${real.name} đã sửa`)
+ expect(unchanged.price_vnd).toBe(20000)
+ const savedLocal=await page.evaluate(() => JSON.parse(localStorage.getItem('fnb-management:menu-items')!))
+ expect(savedLocal[0].name).toBe(demo.name)
 })
 
 test('real unit visibility persists through the editor and POS independently of the base unit', async ({ page, request }, info) => {
@@ -955,4 +959,91 @@ test('real unit visibility persists through the editor and POS independently of 
  if (info.project.name === 'mobile') await page.getByRole('button', { name: 'Mở giỏ hàng', exact: true }).click()
  await expect(page.locator('.cart-item')).toContainText('Thùng')
  await expect(page.locator('.cart-item-bottom > span')).toHaveText(/^0\s*₫$/)
+})
+
+test('real inventory catalog: filtered paging, details, edits, CSV, errors and purchase navigation', async ({ page, request }, info) => {
+ test.skip(!tenant || !email || !password, 'Use the isolated PostgreSQL fixture.')
+ const auth = await request.post(`${base}/api/v1/auth/login`, { data: { tenant_slug: tenant, email, password } })
+ const { data: session } = await auth.json()
+ const headers = { Authorization: `Bearer ${session.access_token}` }
+ const prefix=`Kho thật ${info.project.name} ${Date.now()}`
+ const groupResponse=await request.post(`${base}/api/v1/product-categories`,{headers,data:{name:`Nhóm ${prefix}`}})
+ const {data:group}=await groupResponse.json()
+ let main: {id:string;sku:string;name:string}|undefined
+ for(let i=0;i<7;i++) {
+  const response=await request.post(`${base}/api/v1/products`,{headers,data:{name:`${prefix} ${i}`,category_id:group.id,product_type:'goods',tracks_stock:true,base_unit:'Lon',price_vnd:22000,cost_vnd:16000,units:[{name:'Thùng',ratio:'24',price_vnd:480000,cost_vnd:384000,is_visible:false}],attributes:[{name:'Size',value:'L',price_delta_vnd:1000}]}})
+  expect(response.status()).toBe(201)
+  if(i===0)main=(await response.json()).data
+ }
+ for(const [type,tracked,name] of [['goods',false,'no stock'],['prepared',false,'prepared']] as const) {
+  expect((await request.post(`${base}/api/v1/products`,{headers,data:{name:`${prefix} ${name}`,product_type:type,tracks_stock:tracked,price_vnd:100}})).status()).toBe(201)
+ }
+ await page.addInitScript(()=>localStorage.setItem('fnb-management:menu-items',JSON.stringify([{code:'M00003',name:'POISON INVENTORY',stock:999999,productType:'Hàng hóa thường'}])))
+ await signIn(page,'/management/inventory')
+ await expect(page.getByText('POISON INVENTORY')).toHaveCount(0)
+ const search=page.getByPlaceholder('Tìm theo tên, SKU, barcode...')
+ await search.fill(prefix)
+ const rows=page.locator('.inventory-table tbody > tr.record-expandable-row')
+ if(info.project.name==='desktop') {
+  await expect(rows).toHaveCount(6)
+  await page.getByRole('button',{name:'Trang sau',exact:true}).click()
+  await expect(rows).toHaveCount(1)
+  await page.getByRole('button',{name:'Trang trước',exact:true}).click()
+ } else {
+  await page.locator('.inventory-page .table-footer').scrollIntoViewIfNeeded()
+  await expect(rows).toHaveCount(7)
+  // Visibility beyond six rows is still governed by the frozen mobile stylesheet.
+ }
+ await expect(page.locator('.inventory-metric').filter({has:page.locator('span',{hasText:'Tồn kho thực tế'})}).locator('strong')).toContainText('—')
+ await search.fill(main!.sku)
+ const row=rows.filter({hasText:main!.name})
+ await expect(row).toHaveCount(1)
+ await expect(row.locator('.stock-number')).toContainText('—')
+ await row.click()
+ const detail=page.locator('tr.record-detail-row')
+ await detail.getByLabel(`Đơn vị xem chi tiết ${main!.name}`,{exact:true}).selectOption('Thùng')
+ await expect(detail).toContainText('480.000')
+ await expect(detail.locator('.menu-detail-field').filter({hasText:'Số lượng tồn kho'})).toContainText('—')
+ await row.getByRole('button',{name:`Thao tác ${main!.name}`,exact:true}).click()
+ const editor=page.getByRole('dialog',{name:'Cập nhật sản phẩm',exact:true})
+ await expect(editor.getByLabel('Tồn kho',{exact:true})).toHaveAttribute('readonly','')
+ await expect(editor.getByLabel('Hiển thị Thùng trong thực đơn',{exact:true})).not.toBeChecked()
+ await editor.getByLabel('Giá bán (₫)',{exact:true}).fill('27000')
+ await editor.locator('select[name="category"]').selectOption('__create__')
+ await editor.getByLabel('Tên nhóm hàng mới',{exact:true}).fill(`Mới ${prefix}`)
+ await editor.getByRole('button',{name:'Thêm nhóm',exact:true}).click()
+ await expect(editor.getByLabel('Tên nhóm hàng mới',{exact:true})).toHaveCount(0)
+ await editor.getByRole('button',{name:'Lưu món',exact:true}).click()
+ await expect(editor).toHaveCount(0)
+ const fetched=await request.get(`${base}/api/v1/products/${main!.id}`,{headers})
+ const {data:saved}=await fetched.json()
+ expect(saved.price_vnd).toBe(27000)
+ expect(saved.units[0].is_visible).toBe(false)
+ expect(saved.attributes[0].price_delta_vnd).toBe(1000)
+ expect(saved.category_name).toBe(`Mới ${prefix}`)
+ const localRows=await page.evaluate(()=>JSON.parse(localStorage.getItem('fnb-management:menu-items')!))
+ expect(localRows[0].name).toBe('POISON INVENTORY')
+ if(info.project.name==='desktop') {
+  await search.fill(prefix)
+  const downloadEvent=page.waitForEvent('download')
+  await page.getByRole('button',{name:'Xuất file',exact:true}).click()
+  const download=await downloadEvent
+  const csv=await readFile((await download.path())!,'utf8')
+  expect(csv).toContain(`${prefix} 6`)
+  expect(csv).not.toContain('POISON INVENTORY')
+  await page.locator('.filter-actions select').first().selectOption(group.id)
+  await expect(page.locator('.table-footer')).toContainText('6')
+ }
+ let fail=true
+ await page.route('**/api/v1/products?**',route=>fail?route.fulfill({status:500,contentType:'application/json',body:JSON.stringify({error:{code:'fixture_failure',message:'Fixture failure'}})}):route.continue())
+ await search.fill(`${prefix} error`)
+ await expect(page.getByRole('alert')).toBeVisible()
+ await expect(page.getByText('POISON INVENTORY')).toHaveCount(0)
+ fail=false
+ await page.getByRole('button',{name:'Thử lại',exact:true}).click()
+ await expect(page.getByRole('alert')).toHaveCount(0)
+ await expect(page.getByText('Không tìm thấy sản phẩm',{exact:true})).toBeVisible()
+ if(info.project.name==='mobile')await expect(page.getByRole('button',{name:'Điều chỉnh tồn',exact:true})).toBeDisabled()
+ await page.getByRole('button',{name:'Nhập kho',exact:true}).click()
+ await expect(page).toHaveURL('/management/purchases')
 })

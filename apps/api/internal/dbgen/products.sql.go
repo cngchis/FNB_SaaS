@@ -45,7 +45,8 @@ WHERE p.tenant_id = $1 AND p.deleted_at IS NULL
 AND (p.name ILIKE $2 OR p.sku ILIKE $2)
 AND ($3::uuid IS NULL OR p.category_id = $3)
 AND ($4::text = '' OR p.product_type = $4)
-AND ($5::text = '' OR p.availability = $5)
+AND ($5::boolean IS NULL OR p.tracks_stock = $5)
+AND ($6::text = '' OR p.availability = $6)
 `
 
 type CountProductsParams struct {
@@ -53,6 +54,7 @@ type CountProductsParams struct {
 	Search       string      `json:"search"`
 	CategoryID   pgtype.UUID `json:"category_id"`
 	ProductType  string      `json:"product_type"`
+	TracksStock  pgtype.Bool `json:"tracks_stock"`
 	Availability string      `json:"availability"`
 }
 
@@ -62,6 +64,7 @@ func (q *Queries) CountProducts(ctx context.Context, arg CountProductsParams) (i
 		arg.Search,
 		arg.CategoryID,
 		arg.ProductType,
+		arg.TracksStock,
 		arg.Availability,
 	)
 	var count int64
@@ -432,17 +435,18 @@ WHERE p.tenant_id = $1 AND p.deleted_at IS NULL
 AND (p.name ILIKE $2 OR p.sku ILIKE $2)
 AND ($3::uuid IS NULL OR p.category_id = $3)
 AND ($4::text = '' OR p.product_type = $4)
-AND ($5::text = '' OR p.availability = $5)
+AND ($5::boolean IS NULL OR p.tracks_stock = $5)
+AND ($6::text = '' OR p.availability = $6)
 ORDER BY
-CASE WHEN $6::text = 'name' AND $7::text = 'asc' THEN p.name END ASC,
-CASE WHEN $6::text = 'name' AND $7::text = 'desc' THEN p.name END DESC,
-CASE WHEN $6::text = 'sku' AND $7::text = 'asc' THEN p.sku END ASC,
-CASE WHEN $6::text = 'sku' AND $7::text = 'desc' THEN p.sku END DESC,
-CASE WHEN $6::text = 'price_vnd' AND $7::text = 'asc' THEN p.price_vnd END ASC,
-CASE WHEN $6::text = 'price_vnd' AND $7::text = 'desc' THEN p.price_vnd END DESC,
-CASE WHEN $6::text = 'created_at' AND $7::text = 'asc' THEN p.created_at END ASC,
-CASE WHEN $6::text = 'created_at' AND $7::text = 'desc' THEN p.created_at END DESC,
-p.id ASC LIMIT $9 OFFSET $8
+CASE WHEN $7::text = 'name' AND $8::text = 'asc' THEN p.name END ASC,
+CASE WHEN $7::text = 'name' AND $8::text = 'desc' THEN p.name END DESC,
+CASE WHEN $7::text = 'sku' AND $8::text = 'asc' THEN p.sku END ASC,
+CASE WHEN $7::text = 'sku' AND $8::text = 'desc' THEN p.sku END DESC,
+CASE WHEN $7::text = 'price_vnd' AND $8::text = 'asc' THEN p.price_vnd END ASC,
+CASE WHEN $7::text = 'price_vnd' AND $8::text = 'desc' THEN p.price_vnd END DESC,
+CASE WHEN $7::text = 'created_at' AND $8::text = 'asc' THEN p.created_at END ASC,
+CASE WHEN $7::text = 'created_at' AND $8::text = 'desc' THEN p.created_at END DESC,
+p.id ASC LIMIT $10 OFFSET $9
 `
 
 type ListProductsParams struct {
@@ -450,6 +454,7 @@ type ListProductsParams struct {
 	Search       string      `json:"search"`
 	CategoryID   pgtype.UUID `json:"category_id"`
 	ProductType  string      `json:"product_type"`
+	TracksStock  pgtype.Bool `json:"tracks_stock"`
 	Availability string      `json:"availability"`
 	Sort         string      `json:"sort"`
 	Direction    string      `json:"direction"`
@@ -486,6 +491,7 @@ func (q *Queries) ListProducts(ctx context.Context, arg ListProductsParams) ([]L
 		arg.Search,
 		arg.CategoryID,
 		arg.ProductType,
+		arg.TracksStock,
 		arg.Availability,
 		arg.Sort,
 		arg.Direction,

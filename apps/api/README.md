@@ -4,6 +4,12 @@ Go API foundation for the existing FNB SaaS frontend. The API is a modular monol
 
 ## Local development
 
+Inventory management now uses the shared product API in HTTP mode, filtered by
+`product_type=goods&tracks_stock=true`. Restart the updated API; this filter
+requires no new migration. Stock balances remain unknown, stocktake remains a
+prototype, and mobile rows beyond six await a UI-freeze exception. See the
+[inventory catalog progress report](../../docs/inventory-catalog-api-progress-vi.md).
+
 ### Saved native backend configuration
 
 `make api-run` (also available as `make api-run-local`) automatically reads

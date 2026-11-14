@@ -102,6 +102,7 @@ type CategoryInput struct {
 	Name string `json:"name" binding:"required,max=120"`
 }
 type ListFilter struct {
+	TracksStock *bool `form:"tracks_stock"`
 	httpx.ListQuery
 	CategoryID   *string `form:"category_id" binding:"omitempty,uuid"`
 	ProductType  string  `form:"product_type" binding:"omitempty,oneof=goods prepared"`

@@ -56,7 +56,7 @@ GET/POST/PUT trả envelope `{"data":...}`. Lỗi trả `{"error":{"code":"...",
 
 - Chung: `search` tối đa 200 ký tự, `page` mặc định 1, `page_size` mặc định 20/tối đa 100, `direction=asc|desc`.
 - Tìm kiếm không phân biệt hoa thường; `%`, `_` được hiểu là ký tự thường, không phải wildcard. Gửi query bằng URLSearchParams hoặc URL encoder.
-- Products: tìm tên/mã; lọc `category_id`, `product_type=goods|prepared`, `availability=available|unavailable`; sort `name|sku|price_vnd|created_at`.
+- Products: tìm tên/mã; lọc `category_id`, `product_type=goods|prepared`, `tracks_stock=true|false`, `availability=available|unavailable`; sort `name|sku|price_vnd|created_at`. Bỏ `tracks_stock` sẽ không lọc trường này. Quản lý hàng hóa dùng `product_type=goods&tracks_stock=true`; đây là cờ quản lý kho, không phải số tồn.
 - Customers: tìm tên/điện thoại/email; lọc `group_id`; sort `name|points|created_at`.
 - `product-categories` và `customer-groups` trả mảng trong `data`, chưa phân trang. Danh sách nhóm khách có thêm `members` tính từ khách chưa xóa.
 

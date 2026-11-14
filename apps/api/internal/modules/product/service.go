@@ -19,12 +19,12 @@ func (s Service) List(ctx context.Context, tenant string, filter ListFilter) (Pa
 	result := Page{Items: []Item{}}
 	err := database.WithTenantQueries(ctx, s.Pool, tenant, func(q *dbgen.Queries, tid pgtype.UUID) error {
 		category := httpx.OptionalUUID(filter.CategoryID)
-		count, err := q.CountProducts(ctx, dbgen.CountProductsParams{TenantID: tid, Search: filter.Pattern(), CategoryID: category, ProductType: filter.ProductType, Availability: filter.Availability})
+		count, err := q.CountProducts(ctx, dbgen.CountProductsParams{TenantID: tid, Search: filter.Pattern(), CategoryID: category, ProductType: filter.ProductType, TracksStock: pgtype.Bool{Bool: httpx.Bool(filter.TracksStock, false), Valid: filter.TracksStock != nil}, Availability: filter.Availability})
 		if err != nil {
 			return err
 		}
 		result.Pagination = filter.Pagination(count)
-		rows, err := q.ListProducts(ctx, dbgen.ListProductsParams{TenantID: tid, Search: filter.Pattern(), CategoryID: category, ProductType: filter.ProductType, Availability: filter.Availability, Sort: filter.Sort, Direction: filter.Direction, PageLimit: filter.PageSize, PageOffset: filter.Offset()})
+		rows, err := q.ListProducts(ctx, dbgen.ListProductsParams{TenantID: tid, Search: filter.Pattern(), CategoryID: category, ProductType: filter.ProductType, TracksStock: pgtype.Bool{Bool: httpx.Bool(filter.TracksStock, false), Valid: filter.TracksStock != nil}, Availability: filter.Availability, Sort: filter.Sort, Direction: filter.Direction, PageLimit: filter.PageSize, PageOffset: filter.Offset()})
 		if err != nil {
 			return err
 		}
