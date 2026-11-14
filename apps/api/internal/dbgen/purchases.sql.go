@@ -58,8 +58,9 @@ func (q *Queries) ReadPurchases(ctx context.Context, arg ReadPurchasesParams) ([
 
 const readStockBalances = `-- name: ReadStockBalances :many
 SELECT p.id AS product_id,p.sku,p.name,p.base_unit,coalesce(b.quantity,0)::text AS quantity
-FROM products p LEFT JOIN stock_balances b ON b.tenant_id=p.tenant_id AND b.store_id=$1 AND b.product_id=p.id
+FROM products p JOIN stores s ON s.tenant_id=p.tenant_id AND s.id=$1 LEFT JOIN stock_balances b ON b.tenant_id=p.tenant_id AND b.store_id=$1 AND b.product_id=p.id
 WHERE p.tenant_id=$2 AND p.deleted_at IS NULL AND p.product_type='goods' AND p.tracks_stock
+AND coalesce(b.initialized,p.created_at>=s.inventory_started_at)
 AND (p.name ILIKE $3 OR p.sku ILIKE $3)
 ORDER BY p.name,p.id LIMIT $5 OFFSET $4
 `
@@ -113,10 +114,13 @@ func (q *Queries) ReadStockBalances(ctx context.Context, arg ReadStockBalancesPa
 }
 
 const readStockMovements = `-- name: ReadStockMovements :many
-SELECT m.id,m.product_id,p.name,p.sku,m.quantity_delta::text AS quantity_delta,m.unit_name,m.unit_cost_vnd,m.created_at,r.code AS receipt_code
+SELECT m.id,m.product_id,p.name,p.sku,m.quantity_delta::text AS quantity_delta,m.unit_name,m.unit_cost_vnd,m.created_at,coalesce(r.code,o.order_code,t.code) AS receipt_code
 FROM stock_movements m JOIN products p ON p.tenant_id=m.tenant_id AND p.id=m.product_id
-JOIN purchase_receipt_items l ON l.tenant_id=m.tenant_id AND l.store_id=m.store_id AND l.id=m.receipt_item_id
-JOIN purchase_receipts r ON r.tenant_id=l.tenant_id AND r.store_id=l.store_id AND r.id=l.receipt_id
+LEFT JOIN purchase_receipt_items l ON l.tenant_id=m.tenant_id AND l.store_id=m.store_id AND l.id=m.receipt_item_id
+LEFT JOIN purchase_receipts r ON r.tenant_id=l.tenant_id AND r.store_id=l.store_id AND r.id=l.receipt_id
+LEFT JOIN orders o ON o.tenant_id=m.tenant_id AND o.store_id=m.store_id AND o.id=m.order_id
+LEFT JOIN stocktake_items si ON si.tenant_id=m.tenant_id AND si.store_id=m.store_id AND si.id=m.stocktake_item_id
+LEFT JOIN stocktakes t ON t.tenant_id=si.tenant_id AND t.store_id=si.store_id AND t.id=si.stocktake_id
 WHERE m.tenant_id=$1 AND m.store_id=$2
 AND ($3::uuid IS NULL OR m.product_id=$3)
 ORDER BY m.created_at DESC,m.id DESC LIMIT $5 OFFSET $4
@@ -137,7 +141,7 @@ type ReadStockMovementsRow struct {
 	Sku           string             `json:"sku"`
 	QuantityDelta string             `json:"quantity_delta"`
 	UnitName      string             `json:"unit_name"`
-	UnitCostVnd   int64              `json:"unit_cost_vnd"`
+	UnitCostVnd   pgtype.Int8        `json:"unit_cost_vnd"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 	ReceiptCode   string             `json:"receipt_code"`
 }

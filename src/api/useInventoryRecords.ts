@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { inventoryRepository } from './inventory'
 import { useSessionStore } from './auth'
 import { apiConfig } from './config'
 import { categoriesRepository, menuItemsRepository, type ProductDTO } from './catalog'
@@ -7,11 +8,10 @@ import { errorMessage, productInput, productRow } from './recordAdapter'
 import type { ManagementRow } from '../features/management/moduleConfig'
 import type { Product } from '../types'
 
-export type InventoryProduct = Product & { details?: ManagementRow }
-export function inventoryProduct(item: ProductDTO): InventoryProduct {
-  // ProductArtwork uses Product; numeric placeholders must never render as balances.
-  // Real stock remains unknown until the outbound ledger and reconciliation exist.
-  return { id: item.id, sku: item.sku, name: item.name, category: item.category_name ?? 'Khác', price: item.price_vnd, stock: 0, minimum: 0, color: '#e8edf5', image: item.image_url ?? '', baseUnit: item.base_unit, details: productRow(item) }
+export type InventoryProduct = Product & { details?: ManagementRow; quantity?: string; balanceVersion?: number }
+export function inventoryProduct(item: ProductDTO & {quantity?: string | null;balance_version?: number}): InventoryProduct {
+  // Keep the authoritative decimal string for display and unit conversion.
+  return { id: item.id, sku: item.sku, name: item.name, category: item.category_name ?? 'Khác', price: item.price_vnd, stock: 0, minimum: 0, color: '#e8edf5', image: item.image_url ?? '', baseUnit: item.base_unit, quantity: item.quantity ?? undefined, balanceVersion: item.balance_version, details: {...productRow(item),stock:item.quantity ?? '—'} }
 }
 
 export function useInventoryRecords(active: boolean, page: number, query: string, category: string) {
@@ -27,9 +27,9 @@ export function useInventoryRecords(active: boolean, page: number, query: string
   useEffect(() => { const timer = window.setTimeout(() => setSearch(query), 200); return () => window.clearTimeout(timer) }, [query])
   useEffect(() => { const media = window.matchMedia('(max-width: 720px)'); const update = () => setMobile(media.matches); media.addEventListener('change', update); return () => media.removeEventListener('change', update) }, [])
   const options = { page, page_size: 6, search, product_type: 'goods' as const, tracks_stock: true, ...(category !== 'Tất cả danh mục' ? { category_id: category } : {}) }
-  const list = useQuery({ queryKey: ['api', scope, 'inventory', 'list', options], enabled: enabled && !mobile, queryFn: ({ signal }) => menuItemsRepository.list(options, signal) })
-  const infinite = useInfiniteQuery({ queryKey: ['api', scope, 'inventory', 'mobile', { ...options, page: 1 }], enabled: enabled && mobile, initialPageParam: 1, queryFn: ({ signal, pageParam }) => menuItemsRepository.list({ ...options, page: pageParam }, signal), getNextPageParam: (last, _pages, number) => number < last.pagination.total_pages ? number + 1 : undefined })
-  const summary = useQuery({ queryKey: ['api', scope, 'inventory', 'summary'], enabled, queryFn: ({ signal }) => menuItemsRepository.list({ product_type: 'goods', tracks_stock: true, page_size: 1 }, signal) })
+  const list = useQuery({ queryKey: ['api', scope, 'inventory', 'list', options], enabled: enabled && !mobile, queryFn: ({ signal }) => inventoryRepository.list(options, signal) })
+  const infinite = useInfiniteQuery({ queryKey: ['api', scope, 'inventory', 'mobile', { ...options, page: 1 }], enabled: enabled && mobile, initialPageParam: 1, queryFn: ({ signal, pageParam }) => inventoryRepository.list({ ...options, page: pageParam }, signal), getNextPageParam: (last, _pages, number) => number < last.pagination.total_pages ? number + 1 : undefined })
+  const summary = useQuery({ queryKey: ['api', scope, 'inventory', 'summary'], enabled, queryFn: ({ signal }) => inventoryRepository.summary(signal) })
   const categories = useQuery({ queryKey: ['api', scope, 'categories'], enabled, queryFn: ({ signal }) => categoriesRepository.list(signal) })
   const checkScope = () => { const current = useSessionStore.getState().session; if (!current || `${current.tenant_id}:${current.store_id}:${current.user.id}` !== scope) throw new Error('Phiên đã thay đổi. Vui lòng thử lại.') }
   const invalidate = () => client.invalidateQueries({ queryKey: ['api', scope] })
@@ -50,7 +50,7 @@ export function useInventoryRecords(active: boolean, page: number, query: string
     observer.observe(footerRef.current); return () => observer.disconnect()
   }, [hasMore, loading, infinite.isFetchingNextPage, infinite.fetchNextPage])
   const error = enabled ? (mobile ? infinite.error : list.error) ?? categories.error ?? summary.error ?? open.error : null
-  return { remote, mobile, scope, categories: categories.data ?? [], skuCount: summary.data?.pagination.total,
+  return { remote, mobile, scope, categories: categories.data ?? [], skuCount: summary.data?.sku_count, stockQuantity: summary.data?.quantity, retailValue: summary.data?.retail_value_vnd,
     rows: search === query ? (mobile ? infinite.data?.pages.flatMap((part) => part.items) : list.data?.items)?.map(inventoryProduct) ?? [] : [],
     total: data?.pagination.total ?? 0, pages: Math.max(1, data?.pagination.total_pages ?? 1), loading, pending: open.isPending || save.isPending || createCategory.isPending,
     error: error ? errorMessage(error) : '', footerRef, canManage: session?.user.role === 'owner' || session?.user.role === 'manager',
@@ -59,7 +59,7 @@ export function useInventoryRecords(active: boolean, page: number, query: string
     retry: () => { open.reset(); return Promise.all([mobile ? infinite.refetch() : list.refetch(), categories.refetch(), summary.refetch()]) },
     exportRows: async () => {
       const items: InventoryProduct[] = []; let number = 1; let pages = 1
-      do { checkScope(); const result = await menuItemsRepository.list({ ...options, search: query, page: number, page_size: 100 }); checkScope(); items.push(...result.items.map(inventoryProduct)); pages = result.pagination.total_pages; number++ } while (number <= pages)
+      do { checkScope(); const result = await inventoryRepository.list({ ...options, search: query, page: number, page_size: 100 }); checkScope(); items.push(...result.items.map(inventoryProduct)); pages = result.pagination.total_pages; number++ } while (number <= pages)
       return items
     },
   }

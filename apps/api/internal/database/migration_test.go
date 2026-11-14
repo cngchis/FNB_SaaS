@@ -58,7 +58,7 @@ func TestMigrationRoundTrip(t *testing.T) {
 		if roleCount != 4 {
 			t.Fatalf("found %d seeded roles; want 4", roleCount)
 		}
-		for _, table := range []string{"products", "product_units", "customer_groups", "customers", "entity_counters"} {
+		for _, table := range []string{"products", "product_units", "customer_groups", "customers", "entity_counters", "stocktakes", "stocktake_items", "stock_balances", "stock_movements"} {
 			var forcedRLS bool
 			if err := db.QueryRowContext(ctx, `SELECT relrowsecurity AND relforcerowsecurity FROM pg_class WHERE oid = $1::regclass`, "public."+table).Scan(&forcedRLS); err != nil {
 				t.Fatalf("inspect %s RLS: %v", table, err)

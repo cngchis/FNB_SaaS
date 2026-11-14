@@ -6,6 +6,7 @@ import (
 
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/dbgen"
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/auth"
+	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/inventory"
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/shared/httpx"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -152,10 +153,19 @@ func post(ctx context.Context, tx pgx.Tx, who auth.Identity, id string, expected
 		if product.ProductType != "goods" || !product.TracksStock || product.BaseUnit != l.Unit {
 			return result, conflict("A product's stock settings or base unit changed. Reopen and save the draft.")
 		}
+	}
+	ids := make([]string, 0, len(lines))
+	for _, l := range lines {
+		ids = append(ids, l.ProductID)
+	}
+	if err = inventory.Lock(ctx, tx, who, ids); err != nil {
+		return result, err
+	}
+	for _, l := range lines {
 		if _, err := tx.Exec(ctx, `INSERT INTO stock_movements(tenant_id,store_id,product_id,receipt_item_id,quantity_delta,unit_name,unit_cost_vnd,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, who.TenantID, who.StoreID, l.ProductID, l.ID, l.Quantity, l.Unit, l.Cost, who.UserID); err != nil {
 			return result, err
 		}
-		if _, err := tx.Exec(ctx, `INSERT INTO stock_balances(tenant_id,store_id,product_id,quantity) VALUES($1,$2,$3,$4) ON CONFLICT(tenant_id,store_id,product_id) DO UPDATE SET quantity=stock_balances.quantity+excluded.quantity,updated_at=now()`, who.TenantID, who.StoreID, l.ProductID, l.Quantity); err != nil {
+		if _, err := tx.Exec(ctx, `INSERT INTO stock_balances(tenant_id,store_id,product_id,quantity) VALUES($1,$2,$3,$4) ON CONFLICT(tenant_id,store_id,product_id) DO UPDATE SET quantity=stock_balances.quantity+excluded.quantity,version=stock_balances.version+1,updated_at=now()`, who.TenantID, who.StoreID, l.ProductID, l.Quantity); err != nil {
 			return result, err
 		}
 	}

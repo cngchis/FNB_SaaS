@@ -4,11 +4,14 @@ Go API foundation for the existing FNB SaaS frontend. The API is a modular monol
 
 ## Local development
 
-Inventory management now uses the shared product API in HTTP mode, filtered by
-`product_type=goods&tracks_stock=true`. Restart the updated API; this filter
-requires no new migration. Stock balances remain unknown, stocktake remains a
-prototype, and mobile rows beyond six await a UI-freeze exception. See the
-[inventory catalog progress report](../../docs/inventory-catalog-api-progress-vi.md).
+Inventory quantities and stocktakes now use migration **7**. Stop the old API,
+apply migrations with the admin connection, and restart. Legacy goods require a
+physical opening count per store before checkout; they are not initialized from
+demo data or historical incoming-only balances. First checkout issues goods;
+subsequent debt collection does not issue twice. Overselling returns HTTP 409.
+See [stock ledger rollout](../../docs/stock-ledger-stocktake-progress-vi.md) and
+[ADR-010](../../docs/ADR-010-stock-ledger-and-stocktakes.md). Mobile row limits and
+extra draft UI actions still await UI-freeze approval.
 
 ### Saved native backend configuration
 

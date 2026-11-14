@@ -1,5 +1,7 @@
 # Tiến độ danh mục hàng hóa dùng API
 
+> **Tồn kho / Kiểm kho 14/11:** đã có migration 7, chặn bán âm, snapshot quy đổi và Kiểm kho API. Hàng cũ phải xác nhận tồn đầu kỳ; các mô tả chưa có xuất kho bên dưới là lịch sử. Xem [tiến độ sổ kho và Kiểm kho](./stock-ledger-stocktake-progress-vi.md).
+
 Ngày: 14/11/2026.
 
 ## Đã triển khai

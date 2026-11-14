@@ -154,25 +154,29 @@ type Order struct {
 	RoomID         pgtype.UUID        `json:"room_id"`
 	Note           string             `json:"note"`
 	Version        int64              `json:"version"`
+	StockPostedAt  pgtype.Timestamptz `json:"stock_posted_at"`
 }
 
 type OrderItem struct {
-	ID           pgtype.UUID        `json:"id"`
-	TenantID     pgtype.UUID        `json:"tenant_id"`
-	StoreID      pgtype.UUID        `json:"store_id"`
-	OrderID      pgtype.UUID        `json:"order_id"`
-	ProductID    pgtype.UUID        `json:"product_id"`
-	ProductName  string             `json:"product_name"`
-	Sku          pgtype.Text        `json:"sku"`
-	VariantLabel pgtype.Text        `json:"variant_label"`
-	Quantity     string             `json:"quantity"`
-	UnitPriceVnd int64              `json:"unit_price_vnd"`
-	LineTotalVnd int64              `json:"line_total_vnd"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	LineKey      string             `json:"line_key"`
-	UnitName     string             `json:"unit_name"`
-	Attributes   []byte             `json:"attributes"`
-	UnitCostVnd  pgtype.Int8        `json:"unit_cost_vnd"`
+	ID            pgtype.UUID        `json:"id"`
+	TenantID      pgtype.UUID        `json:"tenant_id"`
+	StoreID       pgtype.UUID        `json:"store_id"`
+	OrderID       pgtype.UUID        `json:"order_id"`
+	ProductID     pgtype.UUID        `json:"product_id"`
+	ProductName   string             `json:"product_name"`
+	Sku           pgtype.Text        `json:"sku"`
+	VariantLabel  pgtype.Text        `json:"variant_label"`
+	Quantity      string             `json:"quantity"`
+	UnitPriceVnd  int64              `json:"unit_price_vnd"`
+	LineTotalVnd  int64              `json:"line_total_vnd"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	LineKey       string             `json:"line_key"`
+	UnitName      string             `json:"unit_name"`
+	Attributes    []byte             `json:"attributes"`
+	UnitCostVnd   pgtype.Int8        `json:"unit_cost_vnd"`
+	StockTracked  bool               `json:"stock_tracked"`
+	StockRatio    pgtype.Numeric     `json:"stock_ratio"`
+	StockBaseUnit string             `json:"stock_base_unit"`
 }
 
 type OrderRound struct {
@@ -346,35 +350,69 @@ type Room struct {
 }
 
 type StockBalance struct {
-	TenantID  pgtype.UUID        `json:"tenant_id"`
-	StoreID   pgtype.UUID        `json:"store_id"`
-	ProductID pgtype.UUID        `json:"product_id"`
-	Quantity  string             `json:"quantity"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	TenantID    pgtype.UUID        `json:"tenant_id"`
+	StoreID     pgtype.UUID        `json:"store_id"`
+	ProductID   pgtype.UUID        `json:"product_id"`
+	Quantity    string             `json:"quantity"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	Initialized bool               `json:"initialized"`
+	Version     int64              `json:"version"`
 }
 
 type StockMovement struct {
-	ID            pgtype.UUID        `json:"id"`
-	TenantID      pgtype.UUID        `json:"tenant_id"`
-	StoreID       pgtype.UUID        `json:"store_id"`
-	ProductID     pgtype.UUID        `json:"product_id"`
-	ReceiptItemID pgtype.UUID        `json:"receipt_item_id"`
-	QuantityDelta string             `json:"quantity_delta"`
-	UnitName      string             `json:"unit_name"`
-	UnitCostVnd   int64              `json:"unit_cost_vnd"`
-	CreatedBy     pgtype.UUID        `json:"created_by"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	ID              pgtype.UUID        `json:"id"`
+	TenantID        pgtype.UUID        `json:"tenant_id"`
+	StoreID         pgtype.UUID        `json:"store_id"`
+	ProductID       pgtype.UUID        `json:"product_id"`
+	ReceiptItemID   pgtype.UUID        `json:"receipt_item_id"`
+	QuantityDelta   string             `json:"quantity_delta"`
+	UnitName        string             `json:"unit_name"`
+	UnitCostVnd     pgtype.Int8        `json:"unit_cost_vnd"`
+	CreatedBy       pgtype.UUID        `json:"created_by"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	Kind            string             `json:"kind"`
+	OrderID         pgtype.UUID        `json:"order_id"`
+	StocktakeItemID pgtype.UUID        `json:"stocktake_item_id"`
+}
+
+type Stocktake struct {
+	ID        pgtype.UUID        `json:"id"`
+	TenantID  pgtype.UUID        `json:"tenant_id"`
+	StoreID   pgtype.UUID        `json:"store_id"`
+	Code      string             `json:"code"`
+	Status    string             `json:"status"`
+	Note      string             `json:"note"`
+	Version   int64              `json:"version"`
+	CreatedBy pgtype.UUID        `json:"created_by"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	PostedAt  pgtype.Timestamptz `json:"posted_at"`
+}
+
+type StocktakeItem struct {
+	ID              pgtype.UUID `json:"id"`
+	TenantID        pgtype.UUID `json:"tenant_id"`
+	StoreID         pgtype.UUID `json:"store_id"`
+	StocktakeID     pgtype.UUID `json:"stocktake_id"`
+	ProductID       pgtype.UUID `json:"product_id"`
+	ProductName     string      `json:"product_name"`
+	Sku             string      `json:"sku"`
+	UnitName        string      `json:"unit_name"`
+	SystemQuantity  string      `json:"system_quantity"`
+	BalanceVersion  int64       `json:"balance_version"`
+	CountedQuantity string      `json:"counted_quantity"`
 }
 
 type Store struct {
-	ID        pgtype.UUID        `json:"id"`
-	TenantID  pgtype.UUID        `json:"tenant_id"`
-	Name      string             `json:"name"`
-	Slug      string             `json:"slug"`
-	Timezone  string             `json:"timezone"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
-	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
+	ID                 pgtype.UUID        `json:"id"`
+	TenantID           pgtype.UUID        `json:"tenant_id"`
+	Name               string             `json:"name"`
+	Slug               string             `json:"slug"`
+	Timezone           string             `json:"timezone"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt          pgtype.Timestamptz `json:"deleted_at"`
+	InventoryStartedAt pgtype.Timestamptz `json:"inventory_started_at"`
 }
 
 type Supplier struct {

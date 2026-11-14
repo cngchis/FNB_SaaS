@@ -53,6 +53,7 @@ func TestUnitVisibility(t *testing.T) {
 	call("POST", "/products", f.owner, "", body, 201, &product)
 	idJSON, _ := json.Marshal(product.Data.ID)
 	_ = json.Unmarshal(idJSON, &productID)
+	countTestStock(t, f, productID, "100")
 	hidden := false
 	legacyVisible := false
 	for _, unit := range product.Data.Units {

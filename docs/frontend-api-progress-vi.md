@@ -1,5 +1,7 @@
 # Tiến độ tích hợp frontend với API
 
+> **Tồn kho / Kiểm kho 14/11:** đã có migration 7, chặn bán âm, snapshot quy đổi và Kiểm kho API. Hàng cũ phải xác nhận tồn đầu kỳ; các mô tả chưa có xuất kho bên dưới là lịch sử. Xem [tiến độ sổ kho và Kiểm kho](./stock-ledger-stocktake-progress-vi.md).
+
 > **Hàng hóa API 14/11:** danh mục/tìm/lọc/phân trang/sửa đã dùng product UUID thật. Tồn kho chưa xác định (`—`), Kiểm kho vẫn demo; mobile trên 6 dòng chờ duyệt CSS. Xem [tiến độ hàng hóa API](./inventory-catalog-api-progress-vi.md). Những đoạn ghi inventory demo bên dưới là lịch sử.
 
 > **Đơn vị tính 14/11:** thêm hiển thị thực đơn riêng theo đơn vị và dropdown chi tiết kho. Cần migration 6; tồn kho/kiểm kho vẫn demo, chưa tự xuất kho POS. Xem [tiến độ đơn vị](./product-units-progress-vi.md).

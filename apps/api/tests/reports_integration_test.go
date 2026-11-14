@@ -72,6 +72,7 @@ func TestReportsReadModel(t *testing.T) {
 	var goods, prepared moduleEnvelope[catalogRecord]
 	call("POST", "/products", f.owner, "", map[string]any{"name": "Report goods", "product_type": "goods", "price_vnd": 10000, "cost_vnd": 4000}, 201, &goods)
 	call("POST", "/products", f.owner, "", map[string]any{"name": "Report prepared", "product_type": "prepared", "price_vnd": 5000}, 201, &prepared)
+	countTestStock(t, f, goods.Data.ID, "100")
 	var first, second, draft moduleEnvelope[posapi.Order]
 	var payment moduleEnvelope[posapi.Payment]
 	call("POST", "/pos/orders", f.cashier, "report-order-00001", map[string]any{"discount_vnd": 1001, "items": []any{map[string]any{"product_id": goods.Data.ID, "quantity": 2}, map[string]any{"product_id": prepared.Data.ID, "quantity": 1}}}, 201, &first)

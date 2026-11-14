@@ -50,7 +50,7 @@ func readOrders(ctx context.Context, tx pgx.Tx, who auth.Identity, id *string, s
 	if len(ids) == 0 {
 		return orders, nil
 	}
-	lines, err := tx.Query(ctx, `SELECT order_id::text,product_id::text,line_key,product_name,coalesce(sku,''),quantity::bigint,unit_name,attributes,unit_price_vnd,line_total_vnd,unit_cost_vnd FROM order_items WHERE tenant_id=$1 AND store_id=$2 AND order_id=ANY($3::uuid[]) ORDER BY created_at,id`, who.TenantID, who.StoreID, ids)
+	lines, err := tx.Query(ctx, `SELECT order_id::text,product_id::text,line_key,product_name,coalesce(sku,''),quantity::bigint,unit_name,attributes,unit_price_vnd,line_total_vnd,unit_cost_vnd,stock_tracked,stock_ratio::text,stock_base_unit FROM order_items WHERE tenant_id=$1 AND store_id=$2 AND order_id=ANY($3::uuid[]) ORDER BY created_at,id`, who.TenantID, who.StoreID, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +59,7 @@ func readOrders(ctx context.Context, tx pgx.Tx, who auth.Identity, id *string, s
 		var oid string
 		var l Line
 		var attrs []byte
-		if err := lines.Scan(&oid, &l.ProductID, &l.Key, &l.Name, &l.SKU, &l.Quantity, &l.Unit, &attrs, &l.Price, &l.Amount, &l.Cost); err != nil {
+		if err := lines.Scan(&oid, &l.ProductID, &l.Key, &l.Name, &l.SKU, &l.Quantity, &l.Unit, &attrs, &l.Price, &l.Amount, &l.Cost, &l.StockTracked, &l.StockRatio, &l.StockBase); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal(attrs, &l.Attributes); err != nil {
@@ -155,6 +155,9 @@ func priceLine(ctx context.Context, tx pgx.Tx, who auth.Identity, in LineInput, 
 		line.SKU = prior.SKU
 		line.Price = prior.Price
 		line.Cost = prior.Cost
+		line.StockTracked = prior.StockTracked
+		line.StockRatio = prior.StockRatio
+		line.StockBase = prior.StockBase
 		var err error
 		line.Amount, err = lineAmount(line.Price, line.Quantity)
 		return line, err
@@ -202,6 +205,9 @@ func priceLine(ctx context.Context, tx pgx.Tx, who auth.Identity, in LineInput, 
 		line.Price += delta
 		line.Name += " · " + a.Name + " " + a.Value
 	}
+	if err = snapshotStock(ctx, tx, who, &line); err != nil {
+		return line, err
+	}
 	line.Amount, err = lineAmount(line.Price, in.Quantity)
 	return line, err
 }
@@ -232,10 +238,12 @@ func saveOrder(ctx context.Context, tx pgx.Tx, who auth.Identity, id *string, in
 	old := map[string]Line{}
 	version := int64(1)
 	paid := int64(0)
+	stockPosted := false
+	priorLines := []Line{}
 	if id != nil {
 		var currentVersion int64
 		var status string
-		err = tx.QueryRow(ctx, `SELECT version,status FROM orders WHERE tenant_id=$1 AND store_id=$2 AND id=$3 AND deleted_at IS NULL FOR UPDATE`, who.TenantID, who.StoreID, *id).Scan(&currentVersion, &status)
+		err = tx.QueryRow(ctx, `SELECT version,status,stock_posted_at IS NOT NULL FROM orders WHERE tenant_id=$1 AND store_id=$2 AND id=$3 AND deleted_at IS NULL FOR UPDATE`, who.TenantID, who.StoreID, *id).Scan(&currentVersion, &status, &stockPosted)
 		if err != nil {
 			return result, err
 		}
@@ -254,6 +262,7 @@ func saveOrder(ctx context.Context, tx pgx.Tx, who auth.Identity, id *string, in
 			return result, conflict("An issued invoice cannot be reassigned to a different customer.")
 		}
 		paid = prior.Paid
+		priorLines = prior.Items
 		for _, line := range prior.Items {
 			old[line.Key] = line
 		}
@@ -262,6 +271,18 @@ func saveOrder(ctx context.Context, tx pgx.Tx, who auth.Identity, id *string, in
 	lines := []Line{}
 	subtotal := int64(0)
 	seen := map[string]bool{}
+	// Lock in UUID order without changing the cashier's item display order.
+	productIDs := make([]string, 0, len(in.Items))
+	for _, entry := range in.Items {
+		productIDs = append(productIDs, entry.ProductID)
+	}
+	sort.Strings(productIDs)
+	for _, productID := range productIDs {
+		var found string
+		if err := tx.QueryRow(ctx, `SELECT id::text FROM products WHERE tenant_id=$1 AND id=$2 FOR SHARE`, who.TenantID, productID).Scan(&found); err != nil {
+			return result, err
+		}
+	}
 	for _, entry := range in.Items {
 		line, err := priceLine(ctx, tx, who, entry, old)
 		if err != nil {
@@ -318,7 +339,7 @@ func saveOrder(ctx context.Context, tx pgx.Tx, who auth.Identity, id *string, in
 	}
 	for _, l := range lines {
 		attrs, _ := json.Marshal(l.Attributes)
-		_, err = tx.Exec(ctx, `INSERT INTO order_items(tenant_id,store_id,order_id,product_id,product_name,sku,quantity,unit_price_vnd,line_total_vnd,line_key,unit_name,attributes,unit_cost_vnd) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13)`, who.TenantID, who.StoreID, oid, l.ProductID, l.Name, l.SKU, l.Quantity, l.Price, l.Amount, l.Key, l.Unit, attrs, l.Cost)
+		_, err = tx.Exec(ctx, `INSERT INTO order_items(tenant_id,store_id,order_id,product_id,product_name,sku,quantity,unit_price_vnd,line_total_vnd,line_key,unit_name,attributes,unit_cost_vnd,stock_tracked,stock_ratio,stock_base_unit) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13,$14,$15::numeric,$16)`, who.TenantID, who.StoreID, oid, l.ProductID, l.Name, l.SKU, l.Quantity, l.Price, l.Amount, l.Key, l.Unit, attrs, l.Cost, l.StockTracked, l.StockRatio, l.StockBase)
 		if err != nil {
 			return result, err
 		}
@@ -332,6 +353,11 @@ func saveOrder(ctx context.Context, tx pgx.Tx, who auth.Identity, id *string, in
 		}
 		_, err = tx.Exec(ctx, `INSERT INTO order_round_items(tenant_id,store_id,round_id,product_id,line_key,product_name,quantity_delta,unit_price_vnd,unit_cost_vnd,unit_name,attributes) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb)`, who.TenantID, who.StoreID, round, l.ProductID, l.Key, l.Name, l.Quantity, l.Price, l.Cost, l.Unit, func() []byte { data, _ := json.Marshal(l.Attributes); return data }())
 		if err != nil {
+			return result, err
+		}
+	}
+	if stockPosted {
+		if err = postStock(ctx, tx, who, oid, priorLines, lines); err != nil {
 			return result, err
 		}
 	}
@@ -368,6 +394,18 @@ func payCash(ctx context.Context, tx pgx.Tx, who auth.Identity, id, key string, 
 	amount := received
 	if amount > due {
 		amount = due
+	}
+	var alreadyPosted bool
+	if err = tx.QueryRow(ctx, `SELECT stock_posted_at IS NOT NULL FROM orders WHERE tenant_id=$1 AND store_id=$2 AND id=$3`, who.TenantID, who.StoreID, id).Scan(&alreadyPosted); err != nil {
+		return result, err
+	}
+	if !alreadyPosted {
+		if err = postStock(ctx, tx, who, id, nil, order.Items); err != nil {
+			return result, err
+		}
+		if _, err = tx.Exec(ctx, `UPDATE orders SET stock_posted_at=now() WHERE tenant_id=$1 AND store_id=$2 AND id=$3`, who.TenantID, who.StoreID, id); err != nil {
+			return result, err
+		}
 	}
 	if amount > 0 {
 		var method string

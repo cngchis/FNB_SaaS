@@ -309,7 +309,7 @@ function PaymentDialog({ kind, total, offline, initialReceived, onClose, onPay }
     try {
       await onPay(kind === 'cash' ? Number(received) : total)
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Không thể tạo đơn hàng.')
+      setError(errorMessage(cause))
       setBusy(false)
     }
   }

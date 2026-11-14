@@ -27,7 +27,10 @@ type Input struct {
 	Items      []LineInput `json:"items" binding:"required,min=1,max=200,dive"`
 }
 type Line struct {
-	Cost *int64 `json:"cost_vnd"`
+	StockTracked bool    `json:"stock_tracked"`
+	StockRatio   *string `json:"stock_ratio"`
+	StockBase    string  `json:"stock_base_unit"`
+	Cost         *int64  `json:"cost_vnd"`
 	LineInput
 	Key    string `json:"key"`
 	Name   string `json:"name"`

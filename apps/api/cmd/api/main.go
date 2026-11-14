@@ -19,6 +19,7 @@ import (
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/auth"
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/cashbook"
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/customer"
+	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/inventory"
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/invoice"
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/pos"
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/product"
@@ -80,6 +81,7 @@ func run() error {
 	secured := api.Group("", auth.Authenticate(pool, cfg.JWTSecret))
 	product.RegisterRoutes(secured, pool)
 	purchase.RegisterRoutes(secured, pool)
+	inventory.RegisterRoutes(secured, pool)
 	customer.RegisterRoutes(secured, pool)
 	room.RegisterRoutes(secured, pool)
 	pos.RegisterRoutes(secured, pool)
