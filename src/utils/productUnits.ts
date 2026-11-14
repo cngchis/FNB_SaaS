@@ -1,4 +1,12 @@
 const scale = 1_000_000n
+
+// Format decimal strings without rounding or changing the stored quantity.
+export function formatStockQuantity(value: unknown): string {
+  if (value === null || value === undefined) return '—'
+  const text = String(value)
+  if (!/^\d+(?:\.\d+)?$/.test(text)) return text
+  return text.includes('.') ? text.replace(/0+$/, '').replace(/\.$/, '') : text
+}
 function decimal(value: unknown): bigint | null {
   if (typeof value !== 'string' && typeof value !== 'number') return null
   const match = String(value).match(/^(\d+)(?:\.(\d{1,6}))?$/)

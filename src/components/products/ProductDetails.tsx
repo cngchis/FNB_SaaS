@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { stockInUnit } from '../../utils/productUnits'
+import { stockInUnit, formatStockQuantity } from '../../utils/productUnits'
 import type { ManagementRow } from '../../features/management/moduleConfig'
 import { formatCurrency } from '../../services/mockData'
 import { expandAttributes, type ProductAttribute } from '../../utils/productOptions'
@@ -25,7 +25,7 @@ export function ProductDetails({ product, unitSelectable = false }: { product: M
     <span className="menu-detail-field"><small>Loại hàng</small><b>{String(product.productType ?? '—')}</b></span>
     <span className="menu-detail-field"><small>Thực đơn</small><b>{String(product.menuType ?? '—')}</b></span>
     <span className="menu-detail-field"><small>Giá vốn</small><b>{prepared ? '—' : money(cost)}</b></span>
-    <span className="menu-detail-field"><small>{prepared ? 'Tồn kho' : 'Số lượng tồn kho'}</small><b>{prepared ? 'Không quản lý' : selected ? stockInUnit(product.stock, Number(selected.ratio), selected.name, base) : String(product.stock ?? '—')}</b></span>
+    <span className="menu-detail-field"><small>{prepared ? 'Tồn kho' : 'Số lượng tồn kho'}</small><b>{prepared ? 'Không quản lý' : selected ? stockInUnit(product.stock, Number(selected.ratio), selected.name, base) : formatStockQuantity(product.stock)}</b></span>
     <span className="menu-detail-field"><small>Hiển thị trong thực đơn</small><b>{visible == null ? '—' : visible ? 'Có' : 'Không'}</b></span>
     <span className="menu-detail-field"><small>Món thêm</small><b>{product.extra == null ? '—' : product.extra ? 'Có' : 'Không'}</b></span>
     <span className="menu-detail-field"><small>Tích điểm</small><b>{product.points == null ? '—' : product.points ? 'Có' : 'Không'}</b></span>

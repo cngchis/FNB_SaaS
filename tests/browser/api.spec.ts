@@ -1070,7 +1070,7 @@ test('real stocktake confirms counts, rejects stale counts and POS blocks overse
  const row=page.locator('tr.record-expandable-row').filter({hasText:'KK'})
  await expect(row.first()).toBeVisible()
  await row.first().click()
- await expect(page.locator('tr.record-detail-row').first()).toContainText('3.500000')
+ await expect(page.locator('tr.record-detail-row').first()).toContainText('3.5')
  const read=async()=> (await(await request.get(`${base}/api/v1/inventory/quantities?product_ids=${product.id}`,{headers})).json()).data[0]
  expect((await read()).quantity).toBe('3.500000')
  await page.getByRole('button',{name:'Phiếu kiểm kho mới',exact:true}).click()
