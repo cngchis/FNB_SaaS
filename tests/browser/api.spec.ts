@@ -1110,3 +1110,68 @@ test('real stocktake confirms counts, rejects stale counts and POS blocks overse
  await expect(page.getByRole('dialog')).toContainText('Thanh toán thành công')
  expect((await read()).quantity).toBe('0.000000')
 })
+
+test('converted purchase units: select, snapshot, reopen and post retry',async({page,request},info)=>{
+ test.skip(!tenant||!email||!password,'Use isolated fixture.')
+ const {data:session}=await(await request.post(`${base}/api/v1/auth/login`,{data:{tenant_slug:tenant,email,password}})).json()
+ const headers={Authorization:`Bearer ${session.access_token}`}
+ const suffix=`${info.project.name}-${Date.now()}`
+ const name=`Bia nhập thùng ${suffix}`
+ const catalog={name,product_type:'goods',base_unit:'Lon',price_vnd:22000,cost_vnd:12000,units:[{name:'Thùng',ratio:'24',price_vnd:480000,cost_vnd:300000,is_visible:false}]}
+ const {data:product}=await(await request.post(`${base}/api/v1/products`,{headers,data:catalog})).json()
+ const {data:supplier}=await(await request.post(`${base}/api/v1/suppliers`,{headers:{...headers,'Idempotency-Key':crypto.randomUUID()},data:{name:`Supplier units ${suffix}`}})).json()
+ const initial={supplier_id:supplier.id,note:'Unit test',items:[{product_id:product.id,quantity:2,cost_vnd:12000}]}
+ const created=await request.post(`${base}/api/v1/purchases`,{headers:{...headers,'Idempotency-Key':crypto.randomUUID()},data:initial})
+ expect(created.status()).toBe(201)
+ const {data:action}=await created.json()
+ const {data:receipt}=await(await request.get(`${base}/api/v1/purchases/${action.id}`,{headers})).json()
+ await signIn(page,'/management/purchases')
+ await page.locator('tr.record-expandable-row').filter({hasText:receipt.code}).click()
+ const unit=page.getByLabel(`Đơn vị ${name}`,{exact:true})
+ await expect(unit).toBeVisible()
+ await expect(unit).toBeEnabled()
+ await unit.selectOption('Thùng')
+ const row=page.locator('.inventory-table tbody tr').filter({hasText:name})
+ await expect(row).toContainText('1 Thùng = 24 Lon')
+ await expect(row).toContainText('48 Lon')
+ await expect(page.getByLabel(`Giá nhập ${name}`,{exact:true})).toHaveValue('300000')
+ await page.getByLabel(`Giá nhập ${name}`,{exact:true}).fill('500000')
+ page.on('dialog',dialog=>{void dialog.accept()})
+ if(info.project.name==='desktop'){
+  let lost=false
+  const keys:string[]=[]
+  await page.route('**/api/v1/purchases/*/post',async(route)=>{
+   keys.push(route.request().headers()['idempotency-key'])
+   if(!lost){lost=true;await route.fetch();expect((await request.put(`${base}/api/v1/products/${product.id}`,{headers,data:{...catalog,units:[{...catalog.units[0],ratio:'20'}]}})).status()).toBe(200);await route.abort('failed')}
+   else await route.continue()
+  })
+  await page.getByRole('button',{name:'Lưu phiếu nhập',exact:true}).click()
+  const dialog=page.getByRole('dialog',{name:'Lưu phiếu nhập',exact:true})
+  await dialog.getByRole('button',{name:'Xác nhận nhập kho',exact:true}).click()
+  await expect(dialog.getByRole('alert')).toBeVisible()
+  await dialog.getByRole('button',{name:'Xác nhận nhập kho',exact:true}).click()
+  await expect(dialog).toHaveCount(0)
+  expect(keys).toHaveLength(2);expect(keys[0]).toBe(keys[1])
+ }else{
+  // Existing frozen mobile CSS hides Save; verify the selector here and post via
+  // API, without pretending that the full mobile save flow is available.
+  const changed=await request.put(`${base}/api/v1/purchases/${action.id}`,{headers:{...headers,'Idempotency-Key':crypto.randomUUID()},data:{...initial,version:1,items:[{product_id:product.id,unit:'Thùng',expected_unit_ratio:'24',expected_base_unit:'Lon',quantity:2,cost_vnd:500000}]}})
+  expect(changed.status()).toBe(200)
+  const {data:updated}=await changed.json()
+  expect((await request.put(`${base}/api/v1/products/${product.id}`,{headers,data:{...catalog,units:[{...catalog.units[0],ratio:'20'}]}})).status()).toBe(200)
+  expect((await request.post(`${base}/api/v1/purchases/${action.id}/post`,{headers:{...headers,'Idempotency-Key':crypto.randomUUID()},data:{version:updated.version}})).status()).toBe(200)
+  await signIn(page,'/management/purchases')
+  await page.locator('tr.record-expandable-row').filter({hasText:receipt.code}).click()
+ }
+ const {data:persisted}=await(await request.get(`${base}/api/v1/purchases/${action.id}`,{headers})).json()
+ expect(persisted.items[0]).toMatchObject({unit:'Thùng',base_unit:'Lon',unit_ratio:'24.000',base_quantity:'48.000000',cost_vnd:500000,total_vnd:1000000})
+ expect(persisted.status).toBe('posted')
+ await expect(unit).toHaveCount(0)
+ await expect(row).toContainText('1 Thùng = 24 Lon')
+ await expect(page.getByLabel(`Giá nhập ${name}`,{exact:true})).toBeDisabled()
+ const {data:balances}=await(await request.get(`${base}/api/v1/inventory/quantities?product_ids=${product.id}`,{headers})).json()
+ expect(balances[0].quantity).toBe('48.000000')
+ const {data:movements}=await(await request.get(`${base}/api/v1/inventory/movements?product_id=${product.id}`,{headers})).json()
+ expect(movements.items).toHaveLength(1)
+ await page.screenshot({path:info.outputPath('converted-purchase.png'),fullPage:true})
+})

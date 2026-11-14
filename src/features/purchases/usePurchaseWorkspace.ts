@@ -7,8 +7,10 @@ import { purchasesRepository, suppliersRepository, receiptInputSchema, receiptSc
 import { errorMessage } from '../../api/recordAdapter'
 import { ApiError } from '../../api/http'
 
+import { purchaseUnitOptions, convertedPurchaseQuantity, purchaseLineInput, purchaseItemsSignature, type PurchaseLine } from './purchaseUnits'
+
 type Receipt = z.infer<typeof receiptSchema>
-export type PurchaseLine = { product: Pick<ProductDTO, 'id' | 'name' | 'sku' | 'base_unit'>; quantity: number; cost: number }
+export type { PurchaseLine } from './purchaseUnits'
 
 export function usePurchaseWorkspace() {
   const session = useSessionStore((state) => state.session)!
@@ -63,10 +65,26 @@ export function usePurchaseWorkspace() {
     } while (page <= pages)
     return items
   } })
+  const lineIDs = lines.filter((line)=>line.needsCatalog).map((line) => line.product.id).sort()
+  const lineProducts = useQuery({ queryKey: ['api', scope, 'purchase-line-products', lineIDs], enabled: creating && lineIDs.length>0 && receipt?.status!=='posted', queryFn: async ({signal}) => {
+    const result: ProductDTO[] = []
+    for (let offset=0;offset<lineIDs.length;offset+=5) result.push(...await Promise.all(lineIDs.slice(offset,offset+5).map((id)=>client.fetchQuery({queryKey:['api',scope,'purchase-product',id],queryFn:()=>menuItemsRepository.get(id,signal),staleTime:30_000}))))
+    return result
+  } })
+  const unitOptions = (line: PurchaseLine) => {
+    const options = purchaseUnitOptions(lineProducts.data?.find((p)=>p.id===line.product.id) ?? line.product)
+    return options.some((u)=>u.name===line.unit) ? options : [...options,{name:line.unit,ratio:line.ratio,cost_vnd:line.cost}]
+  }
+  const selectUnit = (line: PurchaseLine, name: string) => {
+    const product = lineProducts.data?.find((p)=>p.id===line.product.id) ?? line.product
+    const option = purchaseUnitOptions(product).find((u)=>u.name===name)
+    if (!option) return
+    setLines((current)=>current.map((item)=>item===line ? {...item,unit:name,baseUnit:product.base_unit,ratio:option.ratio,cost:option.cost_vnd ?? 0,refreshUnit:true} : item))
+  }
   const invalidate = () => client.invalidateQueries({ queryKey: ['api', scope] })
   const load = (value: Receipt) => {
     saved.current = value; setReceipt(value); setSupplier(value.supplier_id); setNote(value.note)
-    setLines(value.items.map((item) => ({ product: { id: item.product_id, name: item.name, sku: item.sku, base_unit: item.unit }, quantity: item.quantity, cost: item.cost_vnd })))
+    setLines(value.items.map((item) => ({ product: { id: item.product_id, name: item.name, sku: item.sku, base_unit: item.base_unit, cost_vnd:null, units:[] }, unit:item.unit, baseUnit:item.base_unit, ratio:item.unit_ratio, needsCatalog:true, quantity: item.quantity, cost: item.cost_vnd })))
     setQuery(''); setShowAll(false); setCategory(''); setCreating(true)
   }
   const start = () => {
@@ -77,12 +95,13 @@ export function usePurchaseWorkspace() {
     if (pendingCreate.current) throw new Error('Phiếu trước chưa xác định kết quả lưu. Vui lòng thử lại thao tác lưu trước khi mở phiếu khác.')
     const result = await purchasesRepository.get(id); checkScope(); load(result)
   })
-  const add = (product: ProductDTO) => setLines((current) => current.some((line) => line.product.id === product.id) ? current : [...current, { product, quantity: 1, cost: product.cost_vnd ?? 0 }])
+  const add = (product: ProductDTO) => setLines((current) => current.some((line) => line.product.id === product.id) ? current : [...current, { product, unit:product.base_unit, baseUnit:product.base_unit, ratio:'1', quantity: 1, cost: product.cost_vnd ?? 0 }])
   const remember = (id: string, version: number, input: ReceiptInput, source: PurchaseLine[]) => {
     const current = saved.current
     const snapshot: Receipt = { id, version, code: current?.code ?? '—', status: 'draft', total_vnd: input.items.reduce((sum, item) => sum + item.quantity * item.cost_vnd, 0), note: input.note, supplier_id: input.supplier_id, supplier: suppliers.data?.find((item) => item.id === input.supplier_id)?.name ?? '', branch: '', creator: session.user.display_name, created_at: current?.created_at ?? new Date().toISOString(), posted_at: null, items: input.items.map((item) => {
-      const product = source.find((line) => line.product.id === item.product_id)!.product
-      return { id: product.id, product_id: product.id, name: product.name, sku: product.sku, unit: product.base_unit, quantity: item.quantity, cost_vnd: item.cost_vnd, total_vnd: item.quantity * item.cost_vnd }
+      const line = source.find((line) => line.product.id === item.product_id)!
+      const product = line.product
+      return { id: product.id, product_id: product.id, name: product.name, sku: product.sku, unit: line.unit, base_unit:line.baseUnit, unit_ratio:line.ratio, base_quantity:convertedPurchaseQuantity(item.quantity,line.ratio), quantity: item.quantity, cost_vnd: item.cost_vnd, total_vnd: item.quantity * item.cost_vnd }
     }) }
     saved.current = snapshot; setReceipt(snapshot)
   }
@@ -104,8 +123,8 @@ export function usePurchaseWorkspace() {
     const current = saved.current
     if (current?.status === 'posted') throw new Error('Phiếu nhập đã xác nhận không thể sửa.')
     if (!supplier) throw new Error('Vui lòng chọn nhà cung cấp.')
-    const input = receiptInputSchema.parse({ supplier_id: supplier, note, version: current?.version ?? 0, items: lines.map((line) => ({ product_id: line.product.id, quantity: line.quantity, cost_vnd: line.cost })) })
-    const unchanged = current && current.supplier_id === input.supplier_id && current.note === input.note && JSON.stringify(current.items.map((item) => ({ product_id: item.product_id, quantity: item.quantity, cost_vnd: item.cost_vnd }))) === JSON.stringify(input.items)
+    const input = receiptInputSchema.parse({ supplier_id: supplier, note, version: current?.version ?? 0, items: lines.map(purchaseLineInput) })
+    const unchanged = current && current.supplier_id === input.supplier_id && current.note === input.note && purchaseItemsSignature(current.items.map((item) => purchaseLineInput({product:{id:item.product_id,name:item.name,sku:item.sku,base_unit:item.base_unit,cost_vnd:null,units:[]},unit:item.unit,baseUnit:item.base_unit,ratio:item.unit_ratio,quantity:item.quantity,cost:item.cost_vnd}))) === purchaseItemsSignature(input.items)
     let id = current?.id; let version = current?.version
     if (!unchanged) {
       const signature = JSON.stringify(['save', scope, id, input])
@@ -148,5 +167,5 @@ export function usePurchaseWorkspace() {
     await Promise.all([history.refetch(), ...(creating ? [suppliers.refetch(), categories.refetch(), ...(query.trim() || showAll ? [products.refetch()] : [])] : [])])
   })
   const total = lines.reduce((sum, line) => sum + line.quantity * line.cost, 0)
-  return { scope, session, reload, page, setPage, history, suppliers, categories, products, creating, setCreating, receipt, lines, setLines, supplier, setSupplier, note, setNote, query, setQuery, showAll, setShowAll, category, setCategory, busy, failure, notice, confirm, setConfirm, start, open, add, save, createSupplier, createProduct, total, readOnly: receipt?.status === 'posted', error: failure || (history.error || suppliers.error || categories.error || products.error ? errorMessage(history.error || suppliers.error || categories.error || products.error) : '') }
+  return { scope, session, unitOptions, selectUnit, unitsLoading:creating && lineIDs.length>0 && receipt?.status!=='posted' && lineProducts.isPending, reload, page, setPage, history, suppliers, categories, products, creating, setCreating, receipt, lines, setLines, supplier, setSupplier, note, setNote, query, setQuery, showAll, setShowAll, category, setCategory, busy, failure, notice, confirm, setConfirm, start, open, add, save, createSupplier, createProduct, total, readOnly: receipt?.status === 'posted', error: failure || (history.error || suppliers.error || categories.error || products.error || lineProducts.error ? errorMessage(history.error || suppliers.error || categories.error || products.error || lineProducts.error) : '') }
 }

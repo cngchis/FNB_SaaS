@@ -48,14 +48,17 @@ type SupplierInput struct {
 	Version int64  `json:"version" binding:"min=0"`
 }
 type Item struct {
-	ID        string `json:"id"`
-	ProductID string `json:"product_id"`
-	Name      string `json:"name"`
-	SKU       string `json:"sku"`
-	Unit      string `json:"unit"`
-	Quantity  int64  `json:"quantity"`
-	Cost      int64  `json:"cost_vnd"`
-	Total     int64  `json:"total_vnd"`
+	BaseUnit     string `json:"base_unit"`
+	UnitRatio    string `json:"unit_ratio"`
+	BaseQuantity string `json:"base_quantity"`
+	ID           string `json:"id"`
+	ProductID    string `json:"product_id"`
+	Name         string `json:"name"`
+	SKU          string `json:"sku"`
+	Unit         string `json:"unit"`
+	Quantity     int64  `json:"quantity"`
+	Cost         int64  `json:"cost_vnd"`
+	Total        int64  `json:"total_vnd"`
 }
 type Receipt struct {
 	ID         string     `json:"id"`
@@ -86,9 +89,13 @@ type SupplierResult struct {
 	Pagination httpx.Pagination `json:"pagination"`
 }
 type ItemInput struct {
-	ProductID string `json:"product_id" binding:"required,uuid"`
-	Quantity  int64  `json:"quantity" binding:"min=1,max=1000000000"`
-	Cost      int64  `json:"cost_vnd" binding:"min=0,max=9007199254740991"`
+	RefreshUnit   bool   `json:"refresh_unit,omitempty"`
+	ExpectedBase  string `json:"expected_base_unit,omitempty" binding:"max=80"`
+	Unit          string `json:"unit,omitempty" binding:"max=80"`
+	ExpectedRatio string `json:"expected_unit_ratio,omitempty" binding:"max=32"`
+	ProductID     string `json:"product_id" binding:"required,uuid"`
+	Quantity      int64  `json:"quantity" binding:"min=1,max=1000000000"`
+	Cost          int64  `json:"cost_vnd" binding:"min=0,max=9007199254740991"`
 }
 type Input struct {
 	SupplierID string      `json:"supplier_id" binding:"required,uuid"`

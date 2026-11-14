@@ -140,6 +140,11 @@ history; rollback is exercised only in isolated test databases.
 
 ### Unit menu visibility (migration 6)
 
+Current purchasing also requires migration 8 for converted-unit receipt snapshots.
+See [purchase unit rollout and verification](../../docs/purchase-units-progress-vi.md)
+and [ADR-011](../../docs/ADR-011-purchase-unit-snapshots.md). Historical limitations
+below describe migration 6 only.
+
 Migration `00006_unit_menu_visibility.sql` adds independent menu visibility for converted units. `products.is_visible` controls the base unit; `product_units.is_visible` controls each converted unit. Existing units inherit their product visibility during migration; omitted visibility in legacy requests also inherits the base-unit flag. Product availability still applies to all units. Apply migrations with the admin connection and restart the API before using the updated frontend.
 
 POS rejects new lines and quantity increases for hidden units. Existing recorded lines retain their snapshots and can still be paid. This change does not implement stock deduction, purchasing in converted units, or separate SKU identities. See [ADR-009](../../docs/ADR-009-unit-menu-visibility.md) and [rollout instructions](../../docs/product-units-progress-vi.md).

@@ -312,18 +312,21 @@ type PurchaseReceipt struct {
 }
 
 type PurchaseReceiptItem struct {
-	ID          pgtype.UUID        `json:"id"`
-	TenantID    pgtype.UUID        `json:"tenant_id"`
-	StoreID     pgtype.UUID        `json:"store_id"`
-	ReceiptID   pgtype.UUID        `json:"receipt_id"`
-	ProductID   pgtype.UUID        `json:"product_id"`
-	ProductName string             `json:"product_name"`
-	Sku         string             `json:"sku"`
-	UnitName    string             `json:"unit_name"`
-	Quantity    int64              `json:"quantity"`
-	UnitCostVnd int64              `json:"unit_cost_vnd"`
-	TotalVnd    int64              `json:"total_vnd"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	ID           pgtype.UUID        `json:"id"`
+	TenantID     pgtype.UUID        `json:"tenant_id"`
+	StoreID      pgtype.UUID        `json:"store_id"`
+	ReceiptID    pgtype.UUID        `json:"receipt_id"`
+	ProductID    pgtype.UUID        `json:"product_id"`
+	ProductName  string             `json:"product_name"`
+	Sku          string             `json:"sku"`
+	UnitName     string             `json:"unit_name"`
+	Quantity     int64              `json:"quantity"`
+	UnitCostVnd  int64              `json:"unit_cost_vnd"`
+	TotalVnd     int64              `json:"total_vnd"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	BaseUnitName string             `json:"base_unit_name"`
+	UnitRatio    string             `json:"unit_ratio"`
+	BaseQuantity pgtype.Numeric     `json:"base_quantity"`
 }
 
 type Role struct {

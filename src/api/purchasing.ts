@@ -25,10 +25,10 @@ export function supplierInput(row: ManagementRow): SupplierInput {
 }
 export const receiptSchema = z.object({
   id: z.uuid(), code: z.string(), status: z.enum(['draft','posted']), total_vnd: money, note: z.string(), version: z.number().int().positive(), supplier_id: z.uuid(), supplier: z.string(), branch: z.string(), creator: z.string(), created_at: z.iso.datetime({ offset: true }), posted_at: z.iso.datetime({ offset: true }).nullable(),
-  items: z.array(z.object({ id: z.uuid(), product_id: z.uuid(), name: z.string(), sku: z.string(), unit: z.string(), quantity: z.number().int().positive(), cost_vnd: money, total_vnd: money })),
+  items: z.array(z.object({ id: z.uuid(), product_id: z.uuid(), name: z.string(), sku: z.string(), unit: z.string(), base_unit: z.string(), unit_ratio: z.string(), base_quantity: z.string(), quantity: z.number().int().positive(), cost_vnd: money, total_vnd: money })),
 })
 const receiptPage = z.object({ items: z.array(receiptSchema), total: money, total_vnd: money, draft_count: money, pagination })
-export const receiptInputSchema = z.object({ supplier_id: z.uuid(), note: z.string().max(4000), version: z.number().int().nonnegative(), items: z.array(z.object({ product_id: z.uuid(), quantity: z.number().int().min(1).max(1_000_000_000), cost_vnd: money })).min(1).max(500) }).superRefine((input, context) => {
+export const receiptInputSchema = z.object({ supplier_id: z.uuid(), note: z.string().max(4000), version: z.number().int().nonnegative(), items: z.array(z.object({ product_id: z.uuid(), unit: z.string().max(80).optional(), expected_unit_ratio: z.string().regex(/^[0-9]{1,9}(\.[0-9]{1,3})?$/).refine((value) => !/^0+(\.0+)?$/.test(value)).optional(), expected_base_unit: z.string().max(80).optional(), refresh_unit: z.boolean().optional(), quantity: z.number().int().min(1).max(1_000_000_000), cost_vnd: money })).min(1).max(500) }).superRefine((input, context) => {
   let total = 0n
   const products = new Set<string>()
   for (const item of input.items) {

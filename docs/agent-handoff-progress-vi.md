@@ -1,5 +1,7 @@
 # Báo cáo tiến độ và bàn giao cho agent tiếp theo
 
+> **Nhập hàng quy đổi 14/11:** đã thêm chọn đơn vị, giá nhập theo đơn vị và snapshot tỷ lệ; 2 Thùng × 24 cộng 48 Lon, retry không cộng trùng. Cần migration 8. Xem [tiến độ nhập hàng quy đổi](./purchase-units-progress-vi.md); các ghi chú chưa hỗ trợ quy đổi bên dưới là lịch sử.
+
 > **Tồn kho / Kiểm kho 14/11:** đã có migration 7, chặn bán âm, snapshot quy đổi và Kiểm kho API. Hàng cũ phải xác nhận tồn đầu kỳ; các mô tả chưa có xuất kho bên dưới là lịch sử. Xem [tiến độ sổ kho và Kiểm kho](./stock-ledger-stocktake-progress-vi.md).
 
 > **Hàng hóa API 14/11:** danh mục/tìm/lọc/phân trang/sửa đã dùng product UUID thật. Tồn kho chưa xác định (`—`), Kiểm kho vẫn demo; mobile trên 6 dòng chờ duyệt CSS. Xem [tiến độ hàng hóa API](./inventory-catalog-api-progress-vi.md). Những đoạn ghi inventory demo bên dưới là lịch sử.

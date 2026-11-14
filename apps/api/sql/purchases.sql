@@ -27,7 +27,7 @@ WITH matched AS (
  CASE WHEN sqlc.arg(direction)::text='asc' THEN created_at END ASC,
  CASE WHEN sqlc.arg(direction)::text='desc' THEN created_at END DESC, id DESC LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset)
 ) SELECT jsonb_build_object('items',coalesce((SELECT jsonb_agg(to_jsonb(page)||jsonb_build_object('items',coalesce((
- SELECT jsonb_agg(jsonb_build_object('id',l.id,'product_id',l.product_id,'name',l.product_name,'sku',l.sku,'unit',l.unit_name,'quantity',l.quantity,'cost_vnd',l.unit_cost_vnd,'total_vnd',l.total_vnd) ORDER BY l.id)
+ SELECT jsonb_agg(jsonb_build_object('id',l.id,'product_id',l.product_id,'name',l.product_name,'sku',l.sku,'unit',l.unit_name,'base_unit',l.base_unit_name,'unit_ratio',l.unit_ratio::text,'base_quantity',l.base_quantity::text,'quantity',l.quantity,'cost_vnd',l.unit_cost_vnd,'total_vnd',l.total_vnd) ORDER BY l.id)
  FROM purchase_receipt_items l WHERE l.tenant_id=sqlc.arg(tenant_id) AND l.store_id=sqlc.arg(store_id) AND l.receipt_id=page.id),'[]'::jsonb))) FROM page),'[]'::jsonb),
  'total',(SELECT count(*) FROM matched),'total_vnd',(SELECT coalesce(sum(total_vnd),0) FROM matched),
  'draft_count',(SELECT count(*) FROM matched WHERE status='draft'))::jsonb AS payload;
