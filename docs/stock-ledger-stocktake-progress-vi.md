@@ -77,3 +77,13 @@ Commit gợi ý: `feat(inventory): add stocktakes and prevent POS overselling`.
 - Vitest: **50 test / 15 file PASS**. Build: PASS, còn cảnh báo bundle khoảng **688 kB**.
 - Mock/visual: **30 PASS** (12 E2E + 18 baseline, 0 pixel diff), không cập nhật ảnh baseline. Đã xem ảnh thông báo thiếu tồn trong dialog thanh toán mobile.
 - `git diff --check`: PASS. Không tự commit/push hoặc thao tác database cửa hàng.
+
+## Cập nhật cảnh báo tồn kho trên POS
+
+- Cảnh báo thiếu tồn hiển thị ngay khi thêm/tăng món trong giỏ vượt số dư đã tải, không đợi mở thanh toán. Giảm/xóa món về mức hợp lệ sẽ xóa cảnh báo; thông báo dùng toast tự ẩn hiện có.
+- So sánh tổng lượng cơ bản của cùng sản phẩm trên mọi size/đơn vị trong giỏ bằng BigInt, không cộng riêng từng dòng rồi bỏ sót Lon/Thùng.
+- Đơn công nợ đã xuất kho chỉ so sánh lượng tăng thêm; dùng snapshot quy đổi của đơn cũ, không tính lại theo tỷ lệ catalog mới.
+- Chỉ đọc tồn của sản phẩm trong giỏ, tối đa 100 ID mỗi request, cache theo phiên/chi nhánh và cập nhật định kỳ 15 giây. Đây là cảnh báo hỗ trợ; backend vẫn khóa và kiểm tra lại khi thanh toán vì quầy khác có thể thay đổi tồn.
+- Không thêm migration, CSS hoặc thay layout. API chưa trả số dư thì không tự suy diễn tồn 0. Dữ liệu lỗi dùng banner/retry hiện có.
+- TypeScript/build và 54 unit test PASS; 4 E2E API POS/kiểm kho desktop/mobile PASS, gồm cảnh báo trước thanh toán, giảm số lượng xóa cảnh báo và backend chặn khi quầy khác thay đổi tồn.
+- Commit gợi ý riêng: `fix(pos): warn about insufficient stock while editing the cart`.

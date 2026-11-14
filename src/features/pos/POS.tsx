@@ -6,7 +6,7 @@ import { customersRepository } from '../../api/catalog'
 import { errorMessage } from '../../api/recordAdapter'
 import { selectionId, type OrderDTO } from '../../api/pos'
 import { prototypeStorage } from '../../api/prototypeStorage'
-import { Fragment, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { ArrowDownToLine, Banknote, Check, CircleHelp, Clock3, CreditCard, Minus, Plus, QrCode, ReceiptText, Search, ShoppingBag, WifiOff, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { formatCurrency, products, recentOrders } from '../../services/mockData'
@@ -51,6 +51,7 @@ export function POS() {
   const [catalogTab, setCatalogTab] = useState<'tables' | 'menu'>('tables')
   const [temporaryOpen, setTemporaryOpen] = useState(false)
   const [notice, setNotice] = useState('')
+  const stockNotice = useRef('')
   const [newCustomerOpen, setNewCustomerOpen] = useState(false)
   const remote = usePosController()
   const [closingTab, setClosingTab] = useState<string | null>(null)
@@ -134,6 +135,12 @@ export function POS() {
     if (table !== room && (items.length || usePosStore.getState().serverOrderID)) newTab()
     setTable(room); setCatalogTab('menu')
   }
+  useEffect(() => {
+    const previous = stockNotice.current
+    if (remote.stockWarning) setNotice(remote.stockWarning)
+    else if (previous) setNotice((current) => current === previous ? '' : current)
+    stockNotice.current = remote.stockWarning
+  }, [remote.stockWarning, items])
   useEffect(() => { if (!notice) return; const timer = window.setTimeout(() => setNotice(''), 4500); return () => window.clearTimeout(timer) }, [notice])
 
   const syncDemoQueue = async () => {

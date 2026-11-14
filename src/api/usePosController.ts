@@ -1,3 +1,5 @@
+import { cartStockWarning } from './posStock'
+import { inventoryRepository } from './inventory'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRef, useState } from 'react'
 import { apiConfig } from './config'
@@ -21,6 +23,7 @@ export function orderCart(order: OrderDTO) {
 }
 export function usePosController() {
   const session = useSessionStore((state) => state.session)
+  const items = usePosStore((state) => state.items)
   const customerID = usePosStore((state) => state.customerID)
   const serverOrderID = usePosStore((state) => state.serverOrderID)
   const remote = !apiConfig.useMock
@@ -29,23 +32,34 @@ export function usePosController() {
   const [busy, setBusy] = useState(false)
   const lock = useRef(false)
   const paymentKeys = useRef(new Map<string, string>())
+  const savedOrders = useRef(new Map<string, OrderDTO>())
   const catalog = useQuery({ queryKey: ['api', key, 'pos-catalog'], enabled: remote && !!session, queryFn: async ({ signal }) => {
     const [products, customers] = await Promise.all([
       allPages((page) => menuItemsRepository.list({ page, page_size: 100, availability: 'available' }, signal)),
       allPages((page) => customersRepository.list({ page, page_size: 100 }, signal)),
     ])
-    return { products: products.filter((p) => p.is_visible || p.units.some((unit) => unit.is_visible !== false)).map((p): Product => ({ id: p.id, sourceId: p.id, name: p.name, sku: p.sku, category: p.category_name ?? 'Khác', price: p.price_vnd, stock: 0, minimum: 0, color: '#eef2f7', image: p.image_url ?? undefined, baseUnit: p.base_unit, baseVisible: p.is_visible, productType: p.product_type === 'goods' ? 'Hàng hóa thường' : 'Chế biến', attributes: p.attributes, units: p.units.map((u) => ({ name: u.name, ratio: Number(u.ratio), price: u.price_vnd, cost: u.cost_vnd ?? undefined, visible: u.is_visible !== false })) })), customers }
+    return { productRecords: products, products: products.filter((p) => p.is_visible || p.units.some((unit) => unit.is_visible !== false)).map((p): Product => ({ id: p.id, sourceId: p.id, name: p.name, sku: p.sku, category: p.category_name ?? 'Khác', price: p.price_vnd, stock: 0, minimum: 0, color: '#eef2f7', image: p.image_url ?? undefined, baseUnit: p.base_unit, baseVisible: p.is_visible, productType: p.product_type === 'goods' ? 'Hàng hóa thường' : 'Chế biến', attributes: p.attributes, units: p.units.map((u) => ({ name: u.name, ratio: Number(u.ratio), price: u.price_vnd, cost: u.cost_vnd ?? undefined, visible: u.is_visible !== false })) })), customers }
   } })
   const rooms = useQuery({ queryKey: ['api', key, 'rooms'], enabled: remote && !!session, queryFn: ({ signal }) => roomsRepository.list(signal), refetchInterval: 15_000 })
   const orders = useQuery({ queryKey: ['api', key, 'pos-orders'], enabled: remote && !!session, queryFn: async ({ signal }) => {
     const [open, history] = await Promise.all([allPages((page) => ordersRepository.list('open', page, signal)), ordersRepository.list('history', 1, signal)])
     return { open, history: history.items }
   }, refetchInterval: 15_000 })
+  const stockIDs = [...new Set(items.map((line) => line.product.sourceId ?? line.product.id))].sort()
+  const stockEnabled = remote && !!session && stockIDs.length > 0
+  const stock = useQuery({ queryKey: ['api', key, 'pos-stock', stockIDs], enabled: stockEnabled, queryFn: async ({ signal }) => {
+    const balances = []
+    for (let offset=0;offset<stockIDs.length;offset+=100) balances.push(...await inventoryRepository.quantities(stockIDs.slice(offset,offset+100),signal))
+    return balances
+  }, refetchInterval: 15_000 })
+  const prior = serverOrderID ? savedOrders.current.get(serverOrderID) ?? orders.data?.open.find((order) => order.id === serverOrderID) : undefined
+  const stockWarning = remote && stock.data ? cartStockWarning(items, catalog.data?.productRecords ?? [], stock.data, prior) : ''
   const debtEnabled = remote && !!session && !!customerID
   const debt = useQuery({ queryKey: ['api', key, 'customer-debt', customerID, serverOrderID], enabled: debtEnabled, queryFn: ({ signal }) => customersRepository.debt(customerID!, serverOrderID, signal), refetchInterval: 15_000 })
   const invalidate = () => client.invalidateQueries({ queryKey: ['api', key] })
   const apply = (order: OrderDTO) => {
     if (scope() !== key) throw new Error('Phiên đã thay đổi. Vui lòng đăng nhập lại.')
+    savedOrders.current.set(order.id, order)
     usePosStore.setState({ paidAmount: '', items: orderCart(order), serverOrderID: order.id, serverVersion: order.version, orderCode: order.code, table: order.room, customer: order.customer, customerID: order.customer_id, note: order.note, discount: order.discount_vnd, paidBefore: order.paid_vnd, activeDraftId: null, saveKey: '', saveSignature: '' })
   }
   const save = async () => {
@@ -92,6 +106,6 @@ export function usePosController() {
     apply(order)
   })
   const drafts: PosDraft[] = (orders.data?.open ?? []).map((order) => ({ paid: order.paid_vnd, id: order.id, orderCode: order.code, table: order.room, customer: order.customer, items: orderCart(order), discount: order.discount_vnd, note: order.note, updatedAt: order.updated_at }))
-  return { remote, busy, customerDebt: debtEnabled ? debt.data?.outstanding_vnd ?? 0 : 0, debtPending: debtEnabled && debt.isFetching, save: () => exclusive(save), pay, open, invalidate, products: catalog.data?.products ?? [], customers: catalog.data?.customers ?? [], rooms: rooms.data ?? [], drafts, history: orders.data?.history ?? [],
-    loading: remote && (catalog.isPending || rooms.isPending || orders.isPending || (debtEnabled && debt.isPending)), error: catalog.error ?? rooms.error ?? orders.error ?? (debtEnabled ? debt.error : null) }
+  return { remote, busy, stockWarning, customerDebt: debtEnabled ? debt.data?.outstanding_vnd ?? 0 : 0, debtPending: debtEnabled && debt.isFetching, save: () => exclusive(save), pay, open, invalidate, products: catalog.data?.products ?? [], customers: catalog.data?.customers ?? [], rooms: rooms.data ?? [], drafts, history: orders.data?.history ?? [],
+    loading: remote && (catalog.isPending || rooms.isPending || orders.isPending || (debtEnabled && debt.isPending) || (stockEnabled && stock.isPending)), error: (stockEnabled ? stock.error : null) ?? catalog.error ?? rooms.error ?? orders.error ?? (debtEnabled ? debt.error : null) }
 }
