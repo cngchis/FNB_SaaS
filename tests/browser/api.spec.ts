@@ -1175,3 +1175,46 @@ test('converted purchase units: select, snapshot, reopen and post retry',async({
  expect(movements.items).toHaveLength(1)
  await page.screenshot({path:info.outputPath('converted-purchase.png'),fullPage:true})
 })
+
+test('recipe ingredients: cart warning, successful payment and frozen quantities', async ({ page, request }, info) => {
+  test.skip(!tenant || !email || !password, 'Use isolated fixture.')
+  const { data: session } = await (await request.post(`${base}/api/v1/auth/login`, { data: { tenant_slug: tenant, email, password } })).json()
+  const headers = { Authorization: `Bearer ${session.access_token}` }
+  const name = `Latte BOM ${info.project.name} ${Date.now()}`
+  const create = async (data: object) => {
+    const response = await request.post(`${base}/api/v1/products`, { headers, data })
+    expect(response.status()).toBe(201)
+    return (await response.json()).data
+  }
+  const milk = await create({ name: `Milk ${name}`, product_type: 'goods', base_unit: 'L', price_vnd: 10000, cost_vnd: 20000, is_visible: false })
+  const product = await create({ name, product_type: 'prepared', base_unit: 'Ly', price_vnd: 40000 })
+  const recipe = { unit: 'Ly', version: 0, attributes: [], ingredients: [{ product_id: milk.id, base_unit: 'L', quantity: '0.125' }] }
+  const recipeResponse = await request.put(`${base}/api/v1/products/${product.id}/recipes`, { headers: { ...headers, 'Idempotency-Key': crypto.randomUUID() }, data: recipe })
+  expect(recipeResponse.status()).toBe(200)
+  const saved = (await recipeResponse.json()).data
+  expect((await request.post(`${base}/api/v1/stocktakes/confirm`, { headers: { ...headers, 'Idempotency-Key': crypto.randomUUID() }, data: { items: [{ product_id: milk.id, counted_quantity: '0.25', balance_version: 0 }] } })).status()).toBe(201)
+  await signIn(page, '/pos')
+  await page.locator('.pos-search input').fill(name)
+  const add = page.getByRole('button', { name: `Thêm ${name} vào đơn hàng`, exact: true })
+  await add.click()
+  await expect.poll(async () => page.getByRole('status').filter({ hasText: 'Đang tải dữ liệu' }).count()).toBe(0)
+  await add.click()
+  const warning = page.locator('.toast').filter({ hasText: 'Không đủ tồn kho để bán.' })
+  await expect(warning).toHaveCount(0)
+  await add.click()
+  await expect(warning).toBeVisible()
+  if (info.project.name === 'mobile') await page.getByRole('button', { name: 'Mở giỏ hàng', exact: true }).click()
+  await page.getByRole('button', { name: 'Giảm số lượng', exact: true }).click()
+  await expect(warning).toHaveCount(0)
+  await page.getByRole('button', { name: 'Tiền mặt', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Thanh toán tiền mặt' })
+  await expect(dialog).toBeVisible()
+  // The dialog saved the order. A later catalog change must not affect its recipe.
+  expect((await request.put(`${base}/api/v1/products/${product.id}/recipes`, { headers: { ...headers, 'Idempotency-Key': crypto.randomUUID() }, data: { ...recipe, version: saved.version, ingredients: [{ ...recipe.ingredients[0], quantity: '0.5' }] } })).status()).toBe(200)
+  await dialog.getByLabel('Khách thanh toán', { exact: true }).fill('80000')
+  await dialog.getByRole('button', { name: 'Ghi nhận thanh toán', exact: true }).click()
+  await expect(page.getByRole('dialog')).toContainText('Thanh toán thành công')
+  const balances = (await (await request.get(`${base}/api/v1/inventory/quantities?product_ids=${milk.id}`, { headers })).json()).data
+  expect(balances[0].quantity).toBe('0.000000')
+  await page.screenshot({ path: info.outputPath('recipe-payment.png') })
+})

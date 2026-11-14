@@ -28,3 +28,16 @@ it('credits quantities already issued on a receivable and keeps the original uni
  expect(cartStockWarning([line(2,'Thùng')],[changed],stock('24'),prior)).toBe('')
  expect(cartStockWarning([line(1,'Thùng')],[changed],stock('23'),{...prior,invoice_code:null})).toBe(insufficientStockMessage)
 })
+it('aggregates recipe ingredients with retail sales and credits the recorded recipe on a receivable',()=>{
+ const ingredientID = '00000000-0000-4000-8000-000000000002'
+ const recipe = {id, version:1,unit:'Lon',attributes:[],ingredients:[{product_id:ingredientID,name:'Sữa',sku:'M2',base_unit:'L',quantity:'0.125',cost_vnd:20000}]}
+ const prepared = {...product,product_type:'prepared' as const,tracks_stock:false}
+ const balances = [{product_id:ingredientID,quantity:'0.25',balance_version:1}]
+ expect(cartStockWarning([line(2)],[prepared],balances,undefined,{[id]:[recipe]})).toBe('')
+ expect(cartStockWarning([line(3)],[prepared],balances,undefined,{[id]:[recipe]})).toBe(insufficientStockMessage)
+ const prior = orderSchema.parse({id,code:'DH1',room_id:null,room:'Mang về',customer_id:null,customer:'Khách lẻ',note:'',status:'pending_payment',version:2,subtotal_vnd:20000,discount_vnd:0,total_vnd:20000,paid_vnd:1000,invoice_code:'HD1',created_at:'',updated_at:'',items:[{product_id:id,name:'Bia',sku:'M1',quantity:2,unit:'',attributes:[],price_vnd:10000,amount_vnd:20000,key:'x',stock_tracked:false,recipe_snapshot:recipe}]})
+ expect(cartStockWarning([line(3)],[prepared],[{...balances[0],quantity:'0.125'}],prior,{[id]:[{...recipe,ingredients:[{...recipe.ingredients[0],quantity:'0.5'}]}]})).toBe('')
+ expect(cartStockWarning([line(1,'Thùng')],[prepared],balances,undefined,{[id]:[recipe]})).toContain('Chưa có công thức')
+ const retail:CartLine = {quantity:1,product:{...line(1).product,id:ingredientID,sourceId:ingredientID}}
+ expect(cartStockWarning([line(2),retail],[prepared,{...product,id:ingredientID}],balances,undefined,{[id]:[recipe]})).toBe(insufficientStockMessage)
+})

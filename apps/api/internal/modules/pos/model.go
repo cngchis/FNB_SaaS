@@ -3,6 +3,7 @@ package pos
 import (
 	"time"
 
+	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/recipe"
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/shared/httpx"
 )
 
@@ -27,10 +28,11 @@ type Input struct {
 	Items      []LineInput `json:"items" binding:"required,min=1,max=200,dive"`
 }
 type Line struct {
-	StockTracked bool    `json:"stock_tracked"`
-	StockRatio   *string `json:"stock_ratio"`
-	StockBase    string  `json:"stock_base_unit"`
-	Cost         *int64  `json:"cost_vnd"`
+	Recipe       *recipe.Snapshot `json:"recipe_snapshot,omitempty"`
+	StockTracked bool             `json:"stock_tracked"`
+	StockRatio   *string          `json:"stock_ratio"`
+	StockBase    string           `json:"stock_base_unit"`
+	Cost         *int64           `json:"cost_vnd"`
 	LineInput
 	Key    string `json:"key"`
 	Name   string `json:"name"`

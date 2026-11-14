@@ -121,6 +121,12 @@ shift closing and inventory reports are not implemented as real accounting yet.
 
 ## Purchasing and incoming stock
 
+For the current recipe/ingredient backend, apply migration 9 before starting
+the updated API. See [recipe rollout, API contract and remaining UI work](../../docs/recipes-progress-vi.md)
+and [ADR-012](../../docs/ADR-012-recipe-stock-snapshots.md). Legacy prepared
+products stay untracked until their first recipe is configured; historical
+orders are never retroactively issued against stock.
+
 Migration 5 adds supplier CRUD, draft receipts, idempotent posting and an append-only
 incoming ledger with a synchronous balance projection. Owner/manager only; receipts
 and balances are scoped to the JWT-selected store. All writes except supplier delete

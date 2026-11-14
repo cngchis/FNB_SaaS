@@ -22,7 +22,7 @@ WITH issued AS (
  AND o.deleted_at IS NULL AND o.status NOT IN ('cancelled','refunded')
  AND i.created_at >= $4::timestamptz AND i.created_at < $5::timestamptz
 ), lines AS (
- SELECT l.id, l.tenant_id, l.store_id, l.order_id, l.product_id, l.product_name, l.sku, l.variant_label, l.quantity, l.unit_price_vnd, l.line_total_vnd, l.created_at, l.line_key, l.unit_name, l.attributes, l.unit_cost_vnd, l.stock_tracked, l.stock_ratio, l.stock_base_unit, o.discount_vnd, o.subtotal_vnd,
+ SELECT l.id, l.tenant_id, l.store_id, l.order_id, l.product_id, l.product_name, l.sku, l.variant_label, l.quantity, l.unit_price_vnd, l.line_total_vnd, l.created_at, l.line_key, l.unit_name, l.attributes, l.unit_cost_vnd, l.stock_tracked, l.stock_ratio, l.stock_base_unit, l.recipe_snapshot, o.discount_vnd, o.subtotal_vnd,
  coalesce(pc.name,'Khác') AS category,
  CASE WHEN o.subtotal_vnd=0 THEN 0 ELSE floor(l.line_total_vnd::numeric*o.discount_vnd/o.subtotal_vnd) END AS allocated_discount,
  row_number() OVER (PARTITION BY o.id ORDER BY CASE WHEN o.subtotal_vnd=0 THEN 0 ELSE l.line_total_vnd::numeric*o.discount_vnd/o.subtotal_vnd-floor(l.line_total_vnd::numeric*o.discount_vnd/o.subtotal_vnd) END DESC,l.id) AS position
@@ -30,7 +30,7 @@ WITH issued AS (
  LEFT JOIN products p ON p.tenant_id=l.tenant_id AND p.id=l.product_id
  LEFT JOIN product_categories pc ON pc.tenant_id=p.tenant_id AND pc.id=p.category_id
 ), allocated AS (
- SELECT id, tenant_id, store_id, order_id, product_id, product_name, sku, variant_label, quantity, unit_price_vnd, line_total_vnd, created_at, line_key, unit_name, attributes, unit_cost_vnd, stock_tracked, stock_ratio, stock_base_unit, discount_vnd, subtotal_vnd, category, allocated_discount, position, line_total_vnd-allocated_discount-CASE WHEN position<=discount_vnd-sum(allocated_discount) OVER (PARTITION BY order_id) THEN 1 ELSE 0 END AS net_vnd
+ SELECT id, tenant_id, store_id, order_id, product_id, product_name, sku, variant_label, quantity, unit_price_vnd, line_total_vnd, created_at, line_key, unit_name, attributes, unit_cost_vnd, stock_tracked, stock_ratio, stock_base_unit, recipe_snapshot, discount_vnd, subtotal_vnd, category, allocated_discount, position, line_total_vnd-allocated_discount-CASE WHEN position<=discount_vnd-sum(allocated_discount) OVER (PARTITION BY order_id) THEN 1 ELSE 0 END AS net_vnd
  FROM lines
 ), summary AS (
  SELECT count(*) AS invoice_count, count(DISTINCT customer_id) AS customer_count,

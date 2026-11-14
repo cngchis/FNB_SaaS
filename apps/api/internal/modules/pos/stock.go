@@ -7,12 +7,33 @@ import (
 
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/auth"
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/inventory"
+	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/recipe"
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/shared/httpx"
 	"github.com/jackc/pgx/v5"
 )
 
 func snapshotStock(ctx context.Context, tx pgx.Tx, who auth.Identity, line *Line) error {
-	return tx.QueryRow(ctx, `SELECT product_type='goods' AND tracks_stock,base_unit,CASE WHEN $3='' OR $3=base_unit THEN '1' ELSE (SELECT u.ratio::text FROM product_units u WHERE u.tenant_id=p.tenant_id AND u.product_id=p.id AND u.name=$3) END FROM products p WHERE tenant_id=$1 AND id=$2 AND deleted_at IS NULL FOR SHARE`, who.TenantID, line.ProductID, line.Unit).Scan(&line.StockTracked, &line.StockBase, &line.StockRatio)
+	var kind string
+	if err := tx.QueryRow(ctx, `SELECT product_type,product_type='goods' AND tracks_stock,base_unit,CASE WHEN $3='' OR $3=base_unit THEN '1' ELSE (SELECT u.ratio::text FROM product_units u WHERE u.tenant_id=p.tenant_id AND u.product_id=p.id AND u.name=$3) END FROM products p WHERE tenant_id=$1 AND id=$2 AND deleted_at IS NULL FOR SHARE`, who.TenantID, line.ProductID, line.Unit).Scan(&kind, &line.StockTracked, &line.StockBase, &line.StockRatio); err != nil {
+		return err
+	}
+	if kind != "prepared" {
+		return nil
+	}
+	attrs := make([]recipe.Attribute, len(line.Attributes))
+	for i, a := range line.Attributes {
+		attrs[i] = recipe.Attribute{Name: a.Name, Value: a.Value}
+	}
+	unit := line.Unit
+	if unit == "" {
+		unit = line.StockBase
+	}
+	var err error
+	line.Recipe, err = recipe.Resolve(ctx, tx, who.TenantID, line.ProductID, unit, attrs)
+	if line.Recipe != nil {
+		line.Cost = recipe.UnitCost(line.Recipe)
+	}
+	return err
 }
 
 // Quantities are exact rational numbers, serialized to the ledger's six decimal
@@ -22,6 +43,23 @@ func stockDeltas(old, lines []Line) (map[string]*big.Rat, map[string]string, err
 	units := map[string]string{}
 	add := func(items []Line, sign int64) error {
 		for _, line := range items {
+			if line.Recipe != nil {
+				for _, ingredient := range line.Recipe.Ingredients {
+					if !recipe.ValidQuantity(ingredient.Quantity) {
+						return httpx.Invalid("Invalid recipe stock snapshot.")
+					}
+					if prior, ok := units[ingredient.ProductID]; ok && prior != ingredient.BaseUnit {
+						return conflict("Ingredient base units differ between snapshots.")
+					}
+					ratio, _ := new(big.Rat).SetString(ingredient.Quantity)
+					quantity := ratio.Mul(ratio, new(big.Rat).SetInt64(line.Quantity*sign))
+					if deltas[ingredient.ProductID] == nil {
+						deltas[ingredient.ProductID] = new(big.Rat)
+					}
+					deltas[ingredient.ProductID].Add(deltas[ingredient.ProductID], quantity)
+					units[ingredient.ProductID] = ingredient.BaseUnit
+				}
+			}
 			if !line.StockTracked {
 				continue
 			}
@@ -37,6 +75,9 @@ func stockDeltas(old, lines []Line) (map[string]*big.Rat, map[string]string, err
 				deltas[line.ProductID] = new(big.Rat)
 			}
 			deltas[line.ProductID].Add(deltas[line.ProductID], quantity)
+			if prior, ok := units[line.ProductID]; ok && prior != line.StockBase {
+				return conflict("Stock base units differ between snapshots.")
+			}
 			units[line.ProductID] = line.StockBase
 		}
 		return nil
@@ -63,9 +104,13 @@ func postStock(ctx context.Context, tx pgx.Tx, who auth.Identity, id string, old
 	sort.Strings(ids)
 	// Product locks precede balance locks, just as in receiving and stocktaking.
 	for _, product := range ids {
-		var found string
-		if err = tx.QueryRow(ctx, `SELECT id::text FROM products WHERE tenant_id=$1 AND id=$2 FOR SHARE`, who.TenantID, product).Scan(&found); err != nil {
+		var unit string
+		var valid bool
+		if err = tx.QueryRow(ctx, `SELECT base_unit,product_type='goods' AND tracks_stock AND deleted_at IS NULL FROM products WHERE tenant_id=$1 AND id=$2 FOR SHARE`, who.TenantID, product).Scan(&unit, &valid); err != nil {
 			return err
+		}
+		if !valid || unit != units[product] {
+			return conflict("Ingredient or stock identity changed. Recreate the affected selection.")
 		}
 	}
 	if err = inventory.Lock(ctx, tx, who, ids); err != nil {

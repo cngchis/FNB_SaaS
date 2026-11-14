@@ -25,6 +25,7 @@ import (
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/pos"
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/product"
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/purchase"
+	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/recipe"
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/report"
 	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/room"
 	"github.com/gin-gonic/gin"
@@ -196,6 +197,7 @@ func moduleTestFixture(t *testing.T) moduleFixture {
 	auth.RegisterRoutes(api.Group("/auth"), runtime, cfg)
 	secured := api.Group("", auth.Authenticate(runtime, cfg.JWTSecret))
 	product.RegisterRoutes(secured, runtime)
+	recipe.RegisterRoutes(secured, runtime)
 	purchase.RegisterRoutes(secured, runtime)
 	inventory.RegisterRoutes(secured, runtime)
 	customer.RegisterRoutes(secured, runtime)

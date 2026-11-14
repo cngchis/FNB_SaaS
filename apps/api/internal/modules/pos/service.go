@@ -50,7 +50,7 @@ func readOrders(ctx context.Context, tx pgx.Tx, who auth.Identity, id *string, s
 	if len(ids) == 0 {
 		return orders, nil
 	}
-	lines, err := tx.Query(ctx, `SELECT order_id::text,product_id::text,line_key,product_name,coalesce(sku,''),quantity::bigint,unit_name,attributes,unit_price_vnd,line_total_vnd,unit_cost_vnd,stock_tracked,stock_ratio::text,stock_base_unit FROM order_items WHERE tenant_id=$1 AND store_id=$2 AND order_id=ANY($3::uuid[]) ORDER BY created_at,id`, who.TenantID, who.StoreID, ids)
+	lines, err := tx.Query(ctx, `SELECT order_id::text,product_id::text,line_key,product_name,coalesce(sku,''),quantity::bigint,unit_name,attributes,unit_price_vnd,line_total_vnd,unit_cost_vnd,stock_tracked,stock_ratio::text,stock_base_unit,recipe_snapshot FROM order_items WHERE tenant_id=$1 AND store_id=$2 AND order_id=ANY($3::uuid[]) ORDER BY created_at,id`, who.TenantID, who.StoreID, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -58,12 +58,17 @@ func readOrders(ctx context.Context, tx pgx.Tx, who auth.Identity, id *string, s
 	for lines.Next() {
 		var oid string
 		var l Line
-		var attrs []byte
-		if err := lines.Scan(&oid, &l.ProductID, &l.Key, &l.Name, &l.SKU, &l.Quantity, &l.Unit, &attrs, &l.Price, &l.Amount, &l.Cost, &l.StockTracked, &l.StockRatio, &l.StockBase); err != nil {
+		var attrs, recipeData []byte
+		if err := lines.Scan(&oid, &l.ProductID, &l.Key, &l.Name, &l.SKU, &l.Quantity, &l.Unit, &attrs, &l.Price, &l.Amount, &l.Cost, &l.StockTracked, &l.StockRatio, &l.StockBase, &recipeData); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal(attrs, &l.Attributes); err != nil {
 			return nil, err
+		}
+		if len(recipeData) > 0 {
+			if err := json.Unmarshal(recipeData, &l.Recipe); err != nil {
+				return nil, err
+			}
 		}
 		n := positions[oid]
 		orders[n].Items = append(orders[n].Items, l)
@@ -150,6 +155,15 @@ func priceLine(ctx context.Context, tx pgx.Tx, who auth.Identity, in LineInput, 
 			if err := checkUnitSale(ctx, tx, who, in); err != nil {
 				return line, err
 			}
+			if prior.Recipe == nil {
+				var configured bool
+				if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM product_recipes WHERE tenant_id=$1 AND product_id=$2)`, who.TenantID, in.ProductID).Scan(&configured); err != nil {
+					return line, err
+				}
+				if configured {
+					return line, &httpx.PublicError{Status: 409, Code: "recipe_snapshot_missing", Message: "Recreate this legacy selection before adding quantities to a configured recipe product."}
+				}
+			}
 		}
 		line.Name = prior.Name
 		line.SKU = prior.SKU
@@ -158,6 +172,7 @@ func priceLine(ctx context.Context, tx pgx.Tx, who auth.Identity, in LineInput, 
 		line.StockTracked = prior.StockTracked
 		line.StockRatio = prior.StockRatio
 		line.StockBase = prior.StockBase
+		line.Recipe = prior.Recipe
 		var err error
 		line.Amount, err = lineAmount(line.Price, line.Quantity)
 		return line, err
@@ -339,7 +354,13 @@ func saveOrder(ctx context.Context, tx pgx.Tx, who auth.Identity, id *string, in
 	}
 	for _, l := range lines {
 		attrs, _ := json.Marshal(l.Attributes)
-		_, err = tx.Exec(ctx, `INSERT INTO order_items(tenant_id,store_id,order_id,product_id,product_name,sku,quantity,unit_price_vnd,line_total_vnd,line_key,unit_name,attributes,unit_cost_vnd,stock_tracked,stock_ratio,stock_base_unit) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13,$14,$15::numeric,$16)`, who.TenantID, who.StoreID, oid, l.ProductID, l.Name, l.SKU, l.Quantity, l.Price, l.Amount, l.Key, l.Unit, attrs, l.Cost, l.StockTracked, l.StockRatio, l.StockBase)
+		_, err = tx.Exec(ctx, `INSERT INTO order_items(tenant_id,store_id,order_id,product_id,product_name,sku,quantity,unit_price_vnd,line_total_vnd,line_key,unit_name,attributes,unit_cost_vnd,stock_tracked,stock_ratio,stock_base_unit,recipe_snapshot) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13,$14,$15::numeric,$16,$17::jsonb)`, who.TenantID, who.StoreID, oid, l.ProductID, l.Name, l.SKU, l.Quantity, l.Price, l.Amount, l.Key, l.Unit, attrs, l.Cost, l.StockTracked, l.StockRatio, l.StockBase, func() []byte {
+			if l.Recipe == nil {
+				return nil
+			}
+			data, _ := json.Marshal(l.Recipe)
+			return data
+		}())
 		if err != nil {
 			return result, err
 		}
@@ -351,7 +372,13 @@ func saveOrder(ctx context.Context, tx pgx.Tx, who auth.Identity, id *string, in
 		if l.Quantity == 0 {
 			continue
 		}
-		_, err = tx.Exec(ctx, `INSERT INTO order_round_items(tenant_id,store_id,round_id,product_id,line_key,product_name,quantity_delta,unit_price_vnd,unit_cost_vnd,unit_name,attributes) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb)`, who.TenantID, who.StoreID, round, l.ProductID, l.Key, l.Name, l.Quantity, l.Price, l.Cost, l.Unit, func() []byte { data, _ := json.Marshal(l.Attributes); return data }())
+		_, err = tx.Exec(ctx, `INSERT INTO order_round_items(tenant_id,store_id,round_id,product_id,line_key,product_name,quantity_delta,unit_price_vnd,unit_cost_vnd,unit_name,attributes,recipe_snapshot) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12::jsonb)`, who.TenantID, who.StoreID, round, l.ProductID, l.Key, l.Name, l.Quantity, l.Price, l.Cost, l.Unit, func() []byte { data, _ := json.Marshal(l.Attributes); return data }(), func() []byte {
+			if l.Recipe == nil {
+				return nil
+			}
+			data, _ := json.Marshal(l.Recipe)
+			return data
+		}())
 		if err != nil {
 			return result, err
 		}

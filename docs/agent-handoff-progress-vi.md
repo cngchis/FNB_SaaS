@@ -1,5 +1,7 @@
 # Báo cáo tiến độ và bàn giao cho agent tiếp theo
 
+> **Công thức nguyên liệu 14/11:** backend BOM, snapshot đơn/lượt gọi món, xuất nguyên liệu nguyên tử khi thanh toán và cảnh báo giỏ POS đã triển khai. Cần migration 9. Editor công thức đang chờ duyệt ngoại lệ UI FREEZE; không coi là hoàn tất giao diện. Xem [tiến độ công thức](./recipes-progress-vi.md).
+
 > **Nhập hàng quy đổi 14/11:** đã thêm chọn đơn vị, giá nhập theo đơn vị và snapshot tỷ lệ; 2 Thùng × 24 cộng 48 Lon, retry không cộng trùng. Cần migration 8. Xem [tiến độ nhập hàng quy đổi](./purchase-units-progress-vi.md); các ghi chú chưa hỗ trợ quy đổi bên dưới là lịch sử.
 
 > **Tồn kho / Kiểm kho 14/11:** đã có migration 7, chặn bán âm, snapshot quy đổi và Kiểm kho API. Hàng cũ phải xác nhận tồn đầu kỳ; các mô tả chưa có xuất kho bên dưới là lịch sử. Xem [tiến độ sổ kho và Kiểm kho](./stock-ledger-stocktake-progress-vi.md).

@@ -158,25 +158,26 @@ type Order struct {
 }
 
 type OrderItem struct {
-	ID            pgtype.UUID        `json:"id"`
-	TenantID      pgtype.UUID        `json:"tenant_id"`
-	StoreID       pgtype.UUID        `json:"store_id"`
-	OrderID       pgtype.UUID        `json:"order_id"`
-	ProductID     pgtype.UUID        `json:"product_id"`
-	ProductName   string             `json:"product_name"`
-	Sku           pgtype.Text        `json:"sku"`
-	VariantLabel  pgtype.Text        `json:"variant_label"`
-	Quantity      string             `json:"quantity"`
-	UnitPriceVnd  int64              `json:"unit_price_vnd"`
-	LineTotalVnd  int64              `json:"line_total_vnd"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
-	LineKey       string             `json:"line_key"`
-	UnitName      string             `json:"unit_name"`
-	Attributes    []byte             `json:"attributes"`
-	UnitCostVnd   pgtype.Int8        `json:"unit_cost_vnd"`
-	StockTracked  bool               `json:"stock_tracked"`
-	StockRatio    pgtype.Numeric     `json:"stock_ratio"`
-	StockBaseUnit string             `json:"stock_base_unit"`
+	ID             pgtype.UUID        `json:"id"`
+	TenantID       pgtype.UUID        `json:"tenant_id"`
+	StoreID        pgtype.UUID        `json:"store_id"`
+	OrderID        pgtype.UUID        `json:"order_id"`
+	ProductID      pgtype.UUID        `json:"product_id"`
+	ProductName    string             `json:"product_name"`
+	Sku            pgtype.Text        `json:"sku"`
+	VariantLabel   pgtype.Text        `json:"variant_label"`
+	Quantity       string             `json:"quantity"`
+	UnitPriceVnd   int64              `json:"unit_price_vnd"`
+	LineTotalVnd   int64              `json:"line_total_vnd"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	LineKey        string             `json:"line_key"`
+	UnitName       string             `json:"unit_name"`
+	Attributes     []byte             `json:"attributes"`
+	UnitCostVnd    pgtype.Int8        `json:"unit_cost_vnd"`
+	StockTracked   bool               `json:"stock_tracked"`
+	StockRatio     pgtype.Numeric     `json:"stock_ratio"`
+	StockBaseUnit  string             `json:"stock_base_unit"`
+	RecipeSnapshot []byte             `json:"recipe_snapshot"`
 }
 
 type OrderRound struct {
@@ -190,19 +191,20 @@ type OrderRound struct {
 }
 
 type OrderRoundItem struct {
-	ID            pgtype.UUID        `json:"id"`
-	TenantID      pgtype.UUID        `json:"tenant_id"`
-	StoreID       pgtype.UUID        `json:"store_id"`
-	RoundID       pgtype.UUID        `json:"round_id"`
-	ProductID     pgtype.UUID        `json:"product_id"`
-	LineKey       string             `json:"line_key"`
-	ProductName   string             `json:"product_name"`
-	QuantityDelta int64              `json:"quantity_delta"`
-	UnitPriceVnd  int64              `json:"unit_price_vnd"`
-	UnitCostVnd   pgtype.Int8        `json:"unit_cost_vnd"`
-	UnitName      string             `json:"unit_name"`
-	Attributes    []byte             `json:"attributes"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	ID             pgtype.UUID        `json:"id"`
+	TenantID       pgtype.UUID        `json:"tenant_id"`
+	StoreID        pgtype.UUID        `json:"store_id"`
+	RoundID        pgtype.UUID        `json:"round_id"`
+	ProductID      pgtype.UUID        `json:"product_id"`
+	LineKey        string             `json:"line_key"`
+	ProductName    string             `json:"product_name"`
+	QuantityDelta  int64              `json:"quantity_delta"`
+	UnitPriceVnd   int64              `json:"unit_price_vnd"`
+	UnitCostVnd    pgtype.Int8        `json:"unit_cost_vnd"`
+	UnitName       string             `json:"unit_name"`
+	Attributes     []byte             `json:"attributes"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	RecipeSnapshot []byte             `json:"recipe_snapshot"`
 }
 
 type Payment struct {
@@ -269,6 +271,18 @@ type ProductCategory struct {
 	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
 }
 
+type ProductRecipe struct {
+	ID           pgtype.UUID        `json:"id"`
+	TenantID     pgtype.UUID        `json:"tenant_id"`
+	ProductID    pgtype.UUID        `json:"product_id"`
+	SelectionKey string             `json:"selection_key"`
+	UnitName     string             `json:"unit_name"`
+	Attributes   []byte             `json:"attributes"`
+	Version      int64              `json:"version"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
 type ProductUnit struct {
 	ID        pgtype.UUID        `json:"id"`
 	TenantID  pgtype.UUID        `json:"tenant_id"`
@@ -327,6 +341,14 @@ type PurchaseReceiptItem struct {
 	BaseUnitName string             `json:"base_unit_name"`
 	UnitRatio    string             `json:"unit_ratio"`
 	BaseQuantity pgtype.Numeric     `json:"base_quantity"`
+}
+
+type RecipeIngredient struct {
+	TenantID  pgtype.UUID `json:"tenant_id"`
+	RecipeID  pgtype.UUID `json:"recipe_id"`
+	ProductID pgtype.UUID `json:"product_id"`
+	BaseUnit  string      `json:"base_unit"`
+	Quantity  string      `json:"quantity"`
 }
 
 type Role struct {

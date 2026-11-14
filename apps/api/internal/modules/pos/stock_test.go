@@ -1,6 +1,24 @@
 package pos
 
-import "testing"
+import (
+	"github.com/cngchis/FNB_SaaS/apps/api/internal/modules/recipe"
+	"testing"
+)
+
+func TestRecipeStockDeltas(t *testing.T) {
+	snapshot := &recipe.Snapshot{Ingredients: []recipe.Ingredient{{IngredientInput: recipe.IngredientInput{ProductID: "milk", BaseUnit: "l", Quantity: "0.125"}}}}
+	one := "1"
+	old := []Line{{LineInput: LineInput{Quantity: 2}, Recipe: snapshot}}
+	lines := []Line{{LineInput: LineInput{Quantity: 3}, Recipe: snapshot}, {LineInput: LineInput{ProductID: "milk", Quantity: 1}, StockTracked: true, StockRatio: &one, StockBase: "l"}}
+	delta, _, err := stockDeltas(old, lines)
+	if err != nil || delta["milk"].FloatString(6) != "-1.125000" {
+		t.Fatal(delta, err)
+	}
+	delta, _, err = stockDeltas(lines, old)
+	if err != nil || delta["milk"].FloatString(6) != "1.125000" {
+		t.Fatal(delta, err)
+	}
+}
 
 func TestStockDeltas(t *testing.T) {
 	ratio := "24"

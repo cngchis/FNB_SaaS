@@ -1,4 +1,5 @@
 import { cartStockWarning } from './posStock'
+import { recipesRepository, selectRecipe, type RecipeDTO } from './recipes'
 import { inventoryRepository } from './inventory'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRef, useState } from 'react'
@@ -45,15 +46,27 @@ export function usePosController() {
     const [open, history] = await Promise.all([allPages((page) => ordersRepository.list('open', page, signal)), ordersRepository.list('history', 1, signal)])
     return { open, history: history.items }
   }, refetchInterval: 15_000 })
-  const stockIDs = [...new Set(items.map((line) => line.product.sourceId ?? line.product.id))].sort()
+  const prior = serverOrderID ? savedOrders.current.get(serverOrderID) ?? orders.data?.open.find((order) => order.id === serverOrderID) : undefined
+  const recipeIDs = [...new Set(items.map((line) => line.product.sourceId ?? line.product.id).filter((id) => catalog.data?.productRecords.some((p) => p.id === id && p.product_type === 'prepared')))].sort()
+  const recipes = useQuery({ queryKey: ['api', key, 'pos-recipes', recipeIDs], enabled: remote && !!session && recipeIDs.length > 0, queryFn: async ({ signal }) => {
+    const result: Record<string, RecipeDTO[]> = {}
+    for (let offset = 0; offset < recipeIDs.length; offset += 5) await Promise.all(recipeIDs.slice(offset, offset + 5).map(async (id) => { result[id] = await recipesRepository.list(id, signal) }))
+    return result
+  }, refetchInterval: 15_000 })
+  const stockIDs = [...new Set(items.flatMap((line) => {
+    const id = line.product.sourceId ?? line.product.id
+    const old = prior?.items.find((p) => selectionId(p.product_id, p.unit, p.attributes) === selectionId(id, line.product.unitName, line.product.selectedAttributes))
+    const product = catalog.data?.productRecords.find((p) => p.id === id)
+    const snapshot = old ? old.recipe_snapshot : selectRecipe(recipes.data?.[id] ?? [], line.product.unitName || product?.base_unit || '', line.product.selectedAttributes ?? [])
+    return [id, ...(snapshot?.ingredients.map((i) => i.product_id) ?? [])]
+  }))].sort()
   const stockEnabled = remote && !!session && stockIDs.length > 0
   const stock = useQuery({ queryKey: ['api', key, 'pos-stock', stockIDs], enabled: stockEnabled, queryFn: async ({ signal }) => {
     const balances = []
     for (let offset=0;offset<stockIDs.length;offset+=100) balances.push(...await inventoryRepository.quantities(stockIDs.slice(offset,offset+100),signal))
     return balances
   }, refetchInterval: 15_000 })
-  const prior = serverOrderID ? savedOrders.current.get(serverOrderID) ?? orders.data?.open.find((order) => order.id === serverOrderID) : undefined
-  const stockWarning = remote && stock.data ? cartStockWarning(items, catalog.data?.productRecords ?? [], stock.data, prior) : ''
+  const stockWarning = remote && stock.data ? cartStockWarning(items, catalog.data?.productRecords ?? [], stock.data, prior, recipes.data) : ''
   const debtEnabled = remote && !!session && !!customerID
   const debt = useQuery({ queryKey: ['api', key, 'customer-debt', customerID, serverOrderID], enabled: debtEnabled, queryFn: ({ signal }) => customersRepository.debt(customerID!, serverOrderID, signal), refetchInterval: 15_000 })
   const invalidate = () => client.invalidateQueries({ queryKey: ['api', key] })
@@ -107,5 +120,5 @@ export function usePosController() {
   })
   const drafts: PosDraft[] = (orders.data?.open ?? []).map((order) => ({ paid: order.paid_vnd, id: order.id, orderCode: order.code, table: order.room, customer: order.customer, items: orderCart(order), discount: order.discount_vnd, note: order.note, updatedAt: order.updated_at }))
   return { remote, busy, stockWarning, customerDebt: debtEnabled ? debt.data?.outstanding_vnd ?? 0 : 0, debtPending: debtEnabled && debt.isFetching, save: () => exclusive(save), pay, open, invalidate, products: catalog.data?.products ?? [], customers: catalog.data?.customers ?? [], rooms: rooms.data ?? [], drafts, history: orders.data?.history ?? [],
-    loading: remote && (catalog.isPending || rooms.isPending || orders.isPending || (debtEnabled && debt.isPending) || (stockEnabled && stock.isPending)), error: (stockEnabled ? stock.error : null) ?? catalog.error ?? rooms.error ?? orders.error ?? (debtEnabled ? debt.error : null) }
+    loading: remote && (catalog.isPending || rooms.isPending || orders.isPending || (debtEnabled && debt.isPending) || (stockEnabled && stock.isPending) || (remote && recipeIDs.length > 0 && recipes.isPending)), error: (remote && recipeIDs.length > 0 ? recipes.error : null) ?? (stockEnabled ? stock.error : null) ?? catalog.error ?? rooms.error ?? orders.error ?? (debtEnabled ? debt.error : null) }
 }

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { request } from './auth'
+import { recipeSnapshotSchema } from './recipes'
 
 export function selectionId(productId: string, unit = '', attributes: { name: string; value: string }[] = []) {
   return productId + ':' + JSON.stringify({ unit, attributes: [...attributes].sort((a, b) => a.name.localeCompare(b.name)) })
@@ -17,7 +18,7 @@ export const orderSchema = z.object({
   id: z.uuid(), code: z.string(), room_id: z.uuid().nullable(), room: z.string(), customer_id: z.uuid().nullable(), customer: z.string(), note: z.string(),
   status: z.string(), version: z.number().int(), subtotal_vnd: money, discount_vnd: money, total_vnd: money, paid_vnd: money,
   invoice_code: z.string().nullable(), created_at: z.string(), updated_at: z.string(),
-  items: z.array(z.object({ stock_tracked: z.boolean().optional(), stock_ratio: z.string().nullable().optional(), product_id: z.uuid(), name: z.string(), sku: z.string(), quantity: z.number().int(), unit: z.string(), attributes: z.array(z.object({ name: z.string(), value: z.string() })), price_vnd: money, amount_vnd: money, key: z.string() })),
+  items: z.array(z.object({ recipe_snapshot: recipeSnapshotSchema.nullable().optional(), stock_tracked: z.boolean().optional(), stock_ratio: z.string().nullable().optional(), product_id: z.uuid(), name: z.string(), sku: z.string(), quantity: z.number().int(), unit: z.string(), attributes: z.array(z.object({ name: z.string(), value: z.string() })), price_vnd: money, amount_vnd: money, key: z.string() })),
 })
 export type OrderDTO = z.infer<typeof orderSchema>
 export type OrderInput = { room_id: string | null; customer_id: string | null; note: string; discount_vnd: number; version: number; items: { product_id: string; quantity: number; unit: string; attributes: { name: string; value: string }[] }[] }
